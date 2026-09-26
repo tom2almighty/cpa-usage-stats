@@ -1,0 +1,22 @@
+# Binaries and libraries
+*.so
+*.dylib
+*.dll
+*.h
+
+# SQLite databases
+*.db
+*.db-wal
+*.db-shm
+data/
+
+# Frontend dependencies and temp files
+web/node_modules/
+web/.tmp/
+web/dist/index-*.js
+web/dist/style-*.css
+
+# OS and IDE
+.DS_Store
+.vscode/
+.idea/

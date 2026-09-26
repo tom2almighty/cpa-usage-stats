@@ -1,0 +1,129 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install and Build Frontend
+        working-directory: web
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: web/dist/index.html
+          retention-days: 1
+
+  build-binary:
+    needs: build-frontend
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            ext: so
+          - os: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            ext: so
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            ext: dylib
+          - os: macos-13
+            goos: darwin
+            goarch: amd64
+            ext: dylib
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            ext: dll
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: web/dist
+
+      - name: Compile and Package
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          LIB_NAME="cpa-usage-stats.${{ matrix.ext }}"
+          ZIP_NAME="cpa-usage-stats_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.zip"
+          mkdir -p dist
+
+          echo "==> Building CGO shared library: ${LIB_NAME}..."
+          CGO_ENABLED=1 go build -buildmode=c-shared -ldflags="-s -w" -o "${LIB_NAME}" .
+          rm -f "cpa-usage-stats.h"
+
+          echo "==> Packaging into ${ZIP_NAME}..."
+          go run ./cmd/packager -src "${LIB_NAME}" -out "dist/${ZIP_NAME}" -checksum "dist/checksum.line"
+          rm -f "${LIB_NAME}"
+
+      - name: Upload platform zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+          retention-days: 1
+
+  publish-release:
+    needs: build-binary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+
+      - name: Prepare Release Assets
+        run: |
+          mkdir -p release-assets
+          # Find all zip files and copy
+          find all-artifacts -name "*.zip" -exec cp {} release-assets/ \;
+
+          # Consolidate checksums.txt
+          cat all-artifacts/**/checksum.line > release-assets/checksums.txt
+          echo "==> Generated consolidated checksums.txt:"
+          cat release-assets/checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/*.zip
+            release-assets/checksums.txt
+          generate_release_notes: true

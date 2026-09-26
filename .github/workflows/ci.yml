@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths-ignore:
+      - 'README.md'
+      - '.gitignore'
+      - 'assets/**'
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths-ignore:
+      - 'README.md'
+      - '.gitignore'
+      - 'assets/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Frontend Check & Build
+        working-directory: web
+        run: |
+          bun install --frozen-lockfile
+          bun run lint
+          bun run format --check
+          bun run build
+
+      - name: Backend Test
+        run: |
+          go test -v ./...
+
+      - name: Backend Build Check
+        run: |
+          CGO_ENABLED=1 go build -buildmode=c-shared -o test-build.so .
+          rm -f test-build.so test-build.h

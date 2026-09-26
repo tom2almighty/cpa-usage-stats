@@ -39,7 +39,7 @@ jobs:
         run: |
           bun install --frozen-lockfile
           bun run lint
-          bun run format --check
+          bun run format:check
           bun run build
 
       - name: Backend Test

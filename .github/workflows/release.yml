@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -25,7 +25,7 @@ jobs:
           bun run build
 
       - name: Upload frontend artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: frontend-dist
           path: web/dist/index.html
@@ -49,7 +49,7 @@ jobs:
             goos: darwin
             goarch: arm64
             ext: dylib
-          - os: macos-13
+          - os: macos-latest
             goos: darwin
             goarch: amd64
             ext: dylib
@@ -60,7 +60,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -69,7 +69,7 @@ jobs:
           cache: true
 
       - name: Download frontend dist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: frontend-dist
           path: web/dist
@@ -82,8 +82,16 @@ jobs:
           ZIP_NAME="cpa-usage-stats_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.zip"
           mkdir -p dist
 
-          echo "==> Building CGO shared library: ${LIB_NAME}..."
-          CGO_ENABLED=1 go build -buildmode=c-shared -ldflags="-s -w" -o "${LIB_NAME}" .
+          export GOOS="${{ matrix.goos }}"
+          export GOARCH="${{ matrix.goarch }}"
+          export CGO_ENABLED=1
+
+          if [ "${{ matrix.goos }}" = "darwin" ] && [ "${{ matrix.goarch }}" = "amd64" ]; then
+            export CC="clang -target x86_64-apple-macos10.13"
+          fi
+
+          echo "==> Building CGO shared library: ${LIB_NAME} for ${{ matrix.goos }}/${{ matrix.goarch }}..."
+          go build -buildmode=c-shared -ldflags="-s -w" -o "${LIB_NAME}" .
           rm -f "cpa-usage-stats.h"
 
           echo "==> Packaging into ${ZIP_NAME}..."
@@ -91,7 +99,7 @@ jobs:
           rm -f "${LIB_NAME}"
 
       - name: Upload platform zip
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: release-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
@@ -102,10 +110,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download all release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: all-artifacts
 

@@ -2,9 +2,10 @@ package plugin
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"cpa-usage-stats/internal/config"
@@ -16,12 +17,13 @@ import (
 
 // Instance is the singleton plugin instance.
 type Instance struct {
-	mu          sync.RWMutex
-	cfg         config.Config
-	store       *storage.Storage
-	worker      *worker.Worker
-	handler     *handler.Handler
-	htmlContent []byte
+	mu            sync.RWMutex
+	cfg           config.Config
+	currentDBPath string
+	store         *storage.Storage
+	worker        *worker.Worker
+	handler       *handler.Handler
+	htmlContent   []byte
 }
 
 var (
@@ -73,9 +75,9 @@ type registerRequest struct {
 }
 
 type registerResponse struct {
-	SchemaVersion uint32                 `json:"schema_version"`
-	Metadata      metadataResponse       `json:"metadata"`
-	Capabilities  map[string]bool        `json:"capabilities"`
+	SchemaVersion uint32            `json:"schema_version"`
+	Metadata      metadataResponse  `json:"metadata"`
+	Capabilities  map[string]bool   `json:"capabilities"`
 }
 
 type metadataResponse struct {
@@ -84,7 +86,6 @@ type metadataResponse struct {
 	Author           string            `json:"Author"`
 	GitHubRepository string            `json:"GitHubRepository"`
 	Logo             string            `json:"Logo"`
-	Description      string            `json:"Description"`
 	ConfigFields     []configFieldInfo `json:"ConfigFields"`
 }
 
@@ -110,31 +111,18 @@ func (p *Instance) handleRegister(payload []byte) ([]byte, error) {
 	}
 	p.cfg = cfg
 
-	if err := cfg.EnsureDir(); err != nil {
-		log.Printf("[cpa-usage-stats] ensure db dir failed: %v", err)
-	}
+	// Safe non-blocking storage initialization (never fail plugin registration)
+	p.ensureStorageLocked()
 
-	// Initialize Storage if not already done
-	if p.store == nil {
-		store, err := storage.New(cfg.DBPath)
-		if err != nil {
-			return errorEnvelope("storage_init_failed", fmt.Sprintf("failed to init sqlite at %s: %v", cfg.DBPath, err)), nil
-		}
-		p.store = store
-		p.worker = worker.New(cfg, store)
-		p.handler = handler.New(store, p.htmlContent)
-		log.Printf("[cpa-usage-stats] initialized storage at %s", cfg.DBPath)
-	}
-
+	// Return standard metadata and capabilities compatible with all CLIProxyAPI versions (schema_version 1)
 	resp := registerResponse{
-		SchemaVersion: 6,
+		SchemaVersion: 1,
 		Metadata: metadataResponse{
 			Name:             "cpa-usage-stats",
 			Version:          "1.0.0",
-			Author:           "router-for-me",
-			GitHubRepository: "https://github.com/router-for-me/cpa-usage-stats",
-			Logo:             "https://raw.githubusercontent.com/router-for-me/cpa-usage-stats/main/assets/logo.svg",
-			Description:      "CLIProxyAPI 用量统计与可视化看板插件，支持 SQLite 异步持久化与内嵌 Web 监控面板。",
+			Author:           "tom2almighty",
+			GitHubRepository: "https://github.com/tom2almighty/cpa-usage-stats",
+			Logo:             "https://raw.githubusercontent.com/tom2almighty/cpa-usage-stats/main/assets/logo.svg",
 			ConfigFields: []configFieldInfo{
 				{
 					Name:        "db_path",
@@ -182,6 +170,48 @@ func (p *Instance) handleRegister(payload []byte) ([]byte, error) {
 	return okEnvelope(resp)
 }
 
+func (p *Instance) ensureStorageLocked() {
+	if p.store != nil && p.currentDBPath == p.cfg.DBPath {
+		return
+	}
+	if p.worker != nil {
+		p.worker.Stop()
+		p.worker = nil
+	}
+	if p.store != nil {
+		_ = p.store.Close()
+		p.store = nil
+	}
+
+	// 1. Try configured DBPath
+	_ = p.cfg.EnsureDir()
+	store, err := storage.New(p.cfg.DBPath)
+	if err == nil {
+		p.store = store
+		p.worker = worker.New(p.cfg, store)
+		p.handler = handler.New(store, p.htmlContent)
+		p.currentDBPath = p.cfg.DBPath
+		log.Printf("[cpa-usage-stats] initialized storage at %s", p.cfg.DBPath)
+		return
+	}
+
+	log.Printf("[cpa-usage-stats] warning: failed to open storage at %s: %v, attempting fallback...", p.cfg.DBPath, err)
+
+	// 2. Fallback to temporary directory
+	fallbackPath := filepath.Join(os.TempDir(), "cpa-usage-stats.db")
+	fallbackStore, fbErr := storage.New(fallbackPath)
+	if fbErr == nil {
+		p.store = fallbackStore
+		p.worker = worker.New(p.cfg, fallbackStore)
+		p.handler = handler.New(fallbackStore, p.htmlContent)
+		p.currentDBPath = fallbackPath
+		log.Printf("[cpa-usage-stats] initialized fallback storage at %s", fallbackPath)
+		return
+	}
+
+	log.Printf("[cpa-usage-stats] error: fallback storage at %s also failed: %v", fallbackPath, fbErr)
+}
+
 func (p *Instance) handleReconfigure(payload []byte) ([]byte, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -196,6 +226,7 @@ func (p *Instance) handleReconfigure(payload []byte) ([]byte, error) {
 		p.cfg = cfg
 	}
 
+	p.ensureStorageLocked()
 	return okEnvelope(map[string]interface{}{})
 }
 
@@ -209,9 +240,10 @@ func (p *Instance) handleUsage(payload []byte) ([]byte, error) {
 		return errorEnvelope("invalid_usage_record", err.Error()), nil
 	}
 
-	p.mu.RLock()
+	p.mu.Lock()
+	p.ensureStorageLocked()
 	w := p.worker
-	p.mu.RUnlock()
+	p.mu.Unlock()
 
 	if w != nil {
 		w.Enqueue(record)
@@ -260,9 +292,10 @@ func (p *Instance) handleManagementRegister() ([]byte, error) {
 }
 
 func (p *Instance) handleManagementHandle(payload []byte) ([]byte, error) {
-	p.mu.RLock()
+	p.mu.Lock()
+	p.ensureStorageLocked()
 	h := p.handler
-	p.mu.RUnlock()
+	p.mu.Unlock()
 
 	if h == nil {
 		return errorEnvelope("not_initialized", "handler not initialized"), nil
@@ -284,7 +317,6 @@ func (p *Instance) handleManagementHandle(payload []byte) ([]byte, error) {
 func (p *Instance) handleShutdown() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-
 	if p.worker != nil {
 		p.worker.Stop()
 		p.worker = nil
@@ -293,6 +325,7 @@ func (p *Instance) handleShutdown() {
 		_ = p.store.Close()
 		p.store = nil
 	}
+	p.currentDBPath = ""
 	log.Printf("[cpa-usage-stats] shutdown completed")
 }
 

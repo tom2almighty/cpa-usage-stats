@@ -1,8 +1,10 @@
 package config
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -40,11 +42,20 @@ func DefaultConfig() Config {
 // Parse parses YAML configuration data onto DefaultConfig.
 func Parse(rawYAML string) (Config, error) {
 	cfg := DefaultConfig()
-	if rawYAML == "" {
+	rawTrimmed := strings.TrimSpace(rawYAML)
+	if rawTrimmed == "" {
 		return cfg, nil
 	}
 
-	if err := yaml.Unmarshal([]byte(rawYAML), &cfg); err != nil {
+	content := []byte(rawTrimmed)
+	// Try base64 decode if it looks like base64
+	if decoded, err := base64.StdEncoding.DecodeString(rawTrimmed); err == nil && len(decoded) > 0 {
+		if strings.Contains(string(decoded), ":") || strings.Contains(string(decoded), "\n") {
+			content = decoded
+		}
+	}
+
+	if err := yaml.Unmarshal(content, &cfg); err != nil {
 		return cfg, err
 	}
 

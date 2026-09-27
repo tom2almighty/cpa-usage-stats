@@ -20,3 +20,6 @@ web/dist/style-*.css
 .DS_Store
 .vscode/
 .idea/
+
+# Reference repos
+refer/

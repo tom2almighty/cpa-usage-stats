@@ -8,13 +8,10 @@ import (
 	"cpa-usage-stats/internal/model"
 )
 
-func TestStorageLifecycleAndQueries(t *testing.T) {
-	tempDir := t.TempDir()
-	dbPath := filepath.Join(tempDir, "test_usage.db")
-
-	store, err := New(dbPath)
+func TestStorageSummaryRecordsAndRetention(t *testing.T) {
+	store, err := New(filepath.Join(t.TempDir(), "usage.db"))
 	if err != nil {
-		t.Fatalf("failed to create storage: %v", err)
+		t.Fatalf("New: %v", err)
 	}
 	defer store.Close()
 
@@ -22,114 +19,70 @@ func TestStorageLifecycleAndQueries(t *testing.T) {
 	records := []model.UsageRecord{
 		{
 			RequestID:   "req-1",
-			TraceID:     "trace-1",
 			Provider:    "openai",
 			Model:       "gpt-5",
-			Alias:       "gpt-5",
-			APIKey:      "sk-test-1",
+			APIKey:      "sk-a",
 			RequestedAt: now.Add(-2 * time.Hour),
 			Latency:     1500 * time.Millisecond,
 			TTFT:        300 * time.Millisecond,
 			Stream:      true,
-			Failed:      false,
-			Detail: model.UsageDetail{
-				InputTokens:     100,
-				OutputTokens:    50,
-				ReasoningTokens: 10,
-				CachedTokens:    20,
-				TotalTokens:     150,
-			},
+			Detail:      model.UsageDetail{InputTokens: 100, OutputTokens: 50, CachedTokens: 20, TotalTokens: 150},
 		},
 		{
 			RequestID:   "req-2",
-			TraceID:     "trace-2",
-			Provider:    "anthropic",
-			Model:       "claude-3-7-sonnet",
-			Alias:       "sonnet",
-			APIKey:      "sk-test-2",
-			RequestedAt: now.Add(-1 * time.Hour),
+			Provider:    "claude",
+			Model:       "claude-sonnet-4-5",
+			APIKey:      "sk-b",
+			RequestedAt: now.Add(-1 * time.Hour).UTC(), // host may send UTC; must be stored as local wall time
 			Latency:     2000 * time.Millisecond,
-			TTFT:        500 * time.Millisecond,
-			Stream:      true,
 			Failed:      true,
-			Failure: model.UsageFailure{
-				StatusCode: 429,
-				Body:       "rate limit exceeded",
-			},
-			Detail: model.UsageDetail{
-				InputTokens:  200,
-				OutputTokens: 0,
-				TotalTokens:  200,
-			},
+			Failure:     model.UsageFailure{StatusCode: 429, Body: "rate limit exceeded"},
+			Detail:      model.UsageDetail{InputTokens: 200, TotalTokens: 200},
+		},
+		{
+			RequestID:   "req-old",
+			Model:       "gpt-5",
+			RequestedAt: now.AddDate(0, 0, -10),
 		},
 	}
-
 	if err := store.InsertBatch(records); err != nil {
-		t.Fatalf("InsertBatch failed: %v", err)
+		t.Fatalf("InsertBatch: %v", err)
 	}
 
-	// Test Summary
-	summary, err := store.GetSummary(model.UsageFilter{})
+	start := now.Add(-3 * time.Hour)
+	summary, err := store.GetSummary(model.UsageFilter{StartTime: &start}, true)
 	if err != nil {
-		t.Fatalf("GetSummary failed: %v", err)
+		t.Fatalf("GetSummary: %v", err)
+	}
+	if summary.TotalRequests != 2 || summary.FailedRequests != 1 || summary.TotalTokens != 350 {
+		t.Errorf("totals = %d req / %d failed / %d tokens, want 2/1/350", summary.TotalRequests, summary.FailedRequests, summary.TotalTokens)
+	}
+	if summary.AvgTTFTMs != 300 {
+		t.Errorf("avg ttft = %v, want 300 (stream-only)", summary.AvgTTFTMs)
+	}
+	if len(summary.Models) != 2 || summary.Models[0].Name != "claude-sonnet-4-5" {
+		t.Errorf("models should be ordered by tokens desc, got %+v", summary.Models)
+	}
+	if len(summary.APIKeys) != 2 || len(summary.Providers) != 2 {
+		t.Errorf("want 2 api keys and 2 providers, got %d / %d", len(summary.APIKeys), len(summary.Providers))
+	}
+	if summary.Bucket != "hour" || len(summary.Trend) == 0 || len(summary.Trend[0].Bucket) != len("2006-01-02 15") {
+		t.Errorf("unexpected hourly trend: bucket=%s trend=%+v", summary.Bucket, summary.Trend)
 	}
 
-	if summary.TotalRequests != 2 {
-		t.Errorf("expected 2 total requests, got %d", summary.TotalRequests)
-	}
-	if summary.SuccessRequests != 1 {
-		t.Errorf("expected 1 success request, got %d", summary.SuccessRequests)
-	}
-	if summary.FailedRequests != 1 {
-		t.Errorf("expected 1 failed request, got %d", summary.FailedRequests)
-	}
-	if summary.TotalTokens != 350 {
-		t.Errorf("expected 350 total tokens, got %d", summary.TotalTokens)
-	}
-	if len(summary.ModelStats) != 2 {
-		t.Errorf("expected 2 model stats, got %d", len(summary.ModelStats))
-	}
-
-	// Test Records
-	recList, err := store.GetRecords(model.UsageFilter{Page: 1, PageSize: 10})
-	if err != nil {
-		t.Fatalf("GetRecords failed: %v", err)
-	}
-	if recList.Total != 2 {
-		t.Errorf("expected total 2, got %d", recList.Total)
-	}
-	if len(recList.Items) != 2 {
-		t.Errorf("expected 2 items, got %d", len(recList.Items))
-	}
-
-	// Test Filter by failed
 	failedOnly := true
-	failedList, err := store.GetRecords(model.UsageFilter{Failed: &failedOnly, Page: 1, PageSize: 10})
+	list, err := store.GetRecords(model.UsageFilter{StartTime: &start, Failed: &failedOnly, Page: 1, PageSize: 10})
 	if err != nil {
-		t.Fatalf("GetRecords failed: %v", err)
+		t.Fatalf("GetRecords: %v", err)
 	}
-	if failedList.Total != 1 {
-		t.Errorf("expected 1 failed record, got %d", failedList.Total)
+	if list.Total != 1 || list.Items[0].FailureBody != "rate limit exceeded" || !list.Items[0].Failed {
+		t.Fatalf("failed filter returned %+v", list)
 	}
-	if failedList.Items[0].FailureBody != "rate limit exceeded" {
-		t.Errorf("expected failure body 'rate limit exceeded', got %s", failedList.Items[0].FailureBody)
+	if got := list.Items[0].RequestedAt; got.Sub(records[1].RequestedAt).Abs() > time.Millisecond {
+		t.Errorf("requested_at round trip = %v, want %v", got, records[1].RequestedAt)
 	}
 
-	// Test Distinct Models
-	models, err := store.GetDistinctModels()
-	if err != nil {
-		t.Fatalf("GetDistinctModels failed: %v", err)
-	}
-	if len(models) != 2 {
-		t.Errorf("expected 2 distinct models, got %d", len(models))
-	}
-
-	// Test Retention
-	affected, err := store.CleanRetention(1) // 1 day retention, both records are within 2 hours so 0 cleaned
-	if err != nil {
-		t.Fatalf("CleanRetention failed: %v", err)
-	}
-	if affected != 0 {
-		t.Errorf("expected 0 cleaned, got %d", affected)
+	if affected, err := store.CleanRetention(7); err != nil || affected != 1 {
+		t.Errorf("CleanRetention(7) = %d, %v; want 1 old record removed", affected, err)
 	}
 }

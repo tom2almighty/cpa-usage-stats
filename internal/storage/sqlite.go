@@ -12,6 +12,12 @@ import (
 	"cpa-usage-stats/internal/model"
 )
 
+const (
+	timeLayout = "2006-01-02 15:04:05.000"
+	// Upstream error pages can be large HTML documents; keep enough to debug.
+	maxFailureBody = 4 << 10
+)
+
 // Storage handles SQLite persistent storage.
 type Storage struct {
 	db *sql.DB
@@ -20,8 +26,9 @@ type Storage struct {
 
 // New creates and initializes a SQLite storage instance.
 func New(dbPath string) (*Storage, error) {
-	// Enable WAL mode, busy timeout, and normal synchronous mode for high performance
-	dsn := fmt.Sprintf("%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)", dbPath)
+	// WAL + NORMAL sync for write throughput. _timezone=Local makes the driver
+	// parse the zone-less DATETIME text back as server-local time (default is UTC).
+	dsn := fmt.Sprintf("%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)&_timezone=Local", dbPath)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite db: %w", err)
@@ -116,20 +123,13 @@ func (s *Storage) InsertBatch(records []model.UsageRecord) error {
 	defer stmt.Close()
 
 	for _, r := range records {
-		streamVal := 0
-		if r.Stream {
-			streamVal = 1
-		}
-		failedVal := 0
-		if r.Failed {
-			failedVal = 1
-		}
-		latencyMs := r.Latency.Milliseconds()
-		ttftMs := r.TTFT.Milliseconds()
-
 		reqAt := r.RequestedAt
 		if reqAt.IsZero() {
 			reqAt = time.Now()
+		}
+		failureBody := r.Failure.Body
+		if len(failureBody) > maxFailureBody {
+			failureBody = strings.ToValidUTF8(failureBody[:maxFailureBody], "")
 		}
 
 		_, err := stmt.Exec(
@@ -142,13 +142,15 @@ func (s *Storage) InsertBatch(records []model.UsageRecord) error {
 			r.AuthID,
 			r.AuthType,
 			r.Source,
-			streamVal,
-			reqAt.Format("2006-01-02 15:04:05.000"),
-			latencyMs,
-			ttftMs,
-			failedVal,
+			r.Stream,
+			// Stored as server-local wall time so day/hour buckets match the
+			// time ranges computed in handler.
+			reqAt.Local().Format(timeLayout),
+			r.Latency.Milliseconds(),
+			r.TTFT.Milliseconds(),
+			r.Failed,
 			r.Failure.StatusCode,
-			r.Failure.Body,
+			failureBody,
 			r.Detail.InputTokens,
 			r.Detail.OutputTokens,
 			r.Detail.ReasoningTokens,
@@ -169,11 +171,11 @@ func buildWhere(filter model.UsageFilter) (string, []interface{}) {
 
 	if filter.StartTime != nil {
 		clauses = append(clauses, "requested_at >= ?")
-		args = append(args, filter.StartTime.Format("2006-01-02 15:04:05"))
+		args = append(args, filter.StartTime.Format(timeLayout))
 	}
 	if filter.EndTime != nil {
-		clauses = append(clauses, "requested_at <= ?")
-		args = append(args, filter.EndTime.Format("2006-01-02 15:04:05"))
+		clauses = append(clauses, "requested_at < ?")
+		args = append(args, filter.EndTime.Format(timeLayout))
 	}
 	if filter.Model != "" {
 		clauses = append(clauses, "model = ?")
@@ -207,40 +209,29 @@ func buildWhere(filter model.UsageFilter) (string, []interface{}) {
 	return where, args
 }
 
-// GetSummary returns overall aggregated statistics for the filter.
-func (s *Storage) GetSummary(filter model.UsageFilter) (*model.SummaryResponse, error) {
+// GetSummary returns aggregated statistics for the filter. The trend is
+// bucketed by hour when hourly is true, by day otherwise.
+func (s *Storage) GetSummary(filter model.UsageFilter, hourly bool) (*model.SummaryResponse, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	where, args := buildWhere(filter)
 
-	// 1. Overall stats
-	queryTotal := fmt.Sprintf(`
+	resp := &model.SummaryResponse{Bucket: "day"}
+	err := s.db.QueryRow(fmt.Sprintf(`
 		SELECT
 			COUNT(*),
-			COALESCE(SUM(CASE WHEN failed = 0 THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN failed = 1 THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(failed), 0),
 			COALESCE(SUM(total_tokens), 0),
 			COALESCE(SUM(input_tokens), 0),
 			COALESCE(SUM(output_tokens), 0),
 			COALESCE(SUM(reasoning_tokens), 0),
 			COALESCE(SUM(cached_tokens), 0),
 			COALESCE(AVG(latency_ms), 0),
-			COALESCE(AVG(CASE WHEN stream = 1 AND ttft_ms > 0 THEN ttft_ms ELSE NULL END), 0)
-		FROM usage_records
-		%s
-	`, where)
-
-	resp := &model.SummaryResponse{
-		ModelStats:    []model.ModelStat{},
-		ProviderStats: []model.ProviderStat{},
-		DailyStats:    []model.DailyStat{},
-	}
-
-	row := s.db.QueryRow(queryTotal, args...)
-	err := row.Scan(
+			COALESCE(AVG(CASE WHEN stream = 1 AND ttft_ms > 0 THEN ttft_ms END), 0)
+		FROM usage_records %s
+	`, where), args...).Scan(
 		&resp.TotalRequests,
-		&resp.SuccessRequests,
 		&resp.FailedRequests,
 		&resp.TotalTokens,
 		&resp.InputTokens,
@@ -254,111 +245,75 @@ func (s *Storage) GetSummary(filter model.UsageFilter) (*model.SummaryResponse, 
 		return nil, fmt.Errorf("query total summary: %w", err)
 	}
 
-	if resp.TotalRequests > 0 {
-		resp.SuccessRate = float64(resp.SuccessRequests) / float64(resp.TotalRequests) * 100
+	if resp.Models, err = s.groupStats("model", where, args); err != nil {
+		return nil, err
+	}
+	if resp.Providers, err = s.groupStats("provider", where, args); err != nil {
+		return nil, err
+	}
+	if resp.APIKeys, err = s.groupStats("api_key", where, args); err != nil {
+		return nil, err
 	}
 
-	// 2. Model breakdown
-	queryModel := fmt.Sprintf(`
-		SELECT
-			COALESCE(model, 'unknown'),
-			COALESCE(provider, 'unknown'),
-			COUNT(*),
-			COALESCE(SUM(CASE WHEN failed = 1 THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(total_tokens), 0),
-			COALESCE(SUM(input_tokens), 0),
-			COALESCE(SUM(output_tokens), 0),
-			COALESCE(SUM(reasoning_tokens), 0),
-			COALESCE(SUM(cached_tokens), 0),
-			COALESCE(AVG(latency_ms), 0)
-		FROM usage_records
-		%s
-		GROUP BY model, provider
-		ORDER BY SUM(total_tokens) DESC, COUNT(*) DESC
-		LIMIT 50
-	`, where)
-
-	rows, err := s.db.Query(queryModel, args...)
+	// "2006-01-02 15" for hours, "2006-01-02" for days.
+	bucketLen := 10
+	if hourly {
+		resp.Bucket = "hour"
+		bucketLen = 13
+	}
+	rows, err := s.db.Query(fmt.Sprintf(`
+		SELECT SUBSTR(requested_at, 1, %d) AS bucket, COUNT(*), SUM(failed), COALESCE(SUM(total_tokens), 0)
+		FROM usage_records %s
+		GROUP BY bucket
+		ORDER BY bucket
+	`, bucketLen, where), args...)
 	if err != nil {
-		return nil, fmt.Errorf("query model summary: %w", err)
+		return nil, fmt.Errorf("query trend: %w", err)
 	}
 	defer rows.Close()
 
+	resp.Trend = []model.TrendPoint{}
 	for rows.Next() {
-		var m model.ModelStat
-		if err := rows.Scan(
-			&m.Model,
-			&m.Provider,
-			&m.TotalRequests,
-			&m.FailedRequests,
-			&m.TotalTokens,
-			&m.InputTokens,
-			&m.OutputTokens,
-			&m.ReasoningTokens,
-			&m.CachedTokens,
-			&m.AvgLatencyMs,
-		); err != nil {
-			return nil, fmt.Errorf("scan model stat: %w", err)
+		var p model.TrendPoint
+		if err := rows.Scan(&p.Bucket, &p.Requests, &p.Failed, &p.Tokens); err != nil {
+			return nil, fmt.Errorf("scan trend: %w", err)
 		}
-		resp.ModelStats = append(resp.ModelStats, m)
+		resp.Trend = append(resp.Trend, p)
 	}
+	return resp, rows.Err()
+}
 
-	// 3. Provider breakdown
-	queryProvider := fmt.Sprintf(`
+// groupStats aggregates usage by one column. column is a fixed identifier from
+// GetSummary, never user input.
+func (s *Storage) groupStats(column, where string, args []interface{}) ([]model.GroupStat, error) {
+	rows, err := s.db.Query(fmt.Sprintf(`
 		SELECT
-			COALESCE(provider, 'unknown'),
-			COUNT(*),
-			COALESCE(SUM(CASE WHEN failed = 1 THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(total_tokens), 0)
-		FROM usage_records
-		%s
-		GROUP BY provider
-		ORDER BY SUM(total_tokens) DESC, COUNT(*) DESC
-	`, where)
-
-	pRows, err := s.db.Query(queryProvider, args...)
+			COALESCE(%[1]s, ''),
+			COUNT(*) AS requests,
+			SUM(failed),
+			COALESCE(SUM(total_tokens), 0) AS tokens,
+			COALESCE(SUM(input_tokens), 0),
+			COALESCE(SUM(output_tokens), 0),
+			COALESCE(SUM(cached_tokens), 0),
+			COALESCE(AVG(latency_ms), 0)
+		FROM usage_records %[2]s
+		GROUP BY %[1]s
+		ORDER BY tokens DESC, requests DESC
+	`, column, where), args...)
 	if err != nil {
-		return nil, fmt.Errorf("query provider summary: %w", err)
+		return nil, fmt.Errorf("query %s stats: %w", column, err)
 	}
-	defer pRows.Close()
+	defer rows.Close()
 
-	for pRows.Next() {
-		var p model.ProviderStat
-		if err := pRows.Scan(&p.Provider, &p.TotalRequests, &p.FailedRequests, &p.TotalTokens); err != nil {
-			return nil, fmt.Errorf("scan provider stat: %w", err)
+	stats := []model.GroupStat{}
+	for rows.Next() {
+		var g model.GroupStat
+		if err := rows.Scan(&g.Name, &g.Requests, &g.Failed, &g.TotalTokens, &g.InputTokens, &g.OutputTokens, &g.CachedTokens, &g.AvgLatencyMs); err != nil {
+			return nil, fmt.Errorf("scan %s stats: %w", column, err)
 		}
-		resp.ProviderStats = append(resp.ProviderStats, p)
+		stats = append(stats, g)
 	}
-
-	// 4. Daily trend (recent 30 days)
-	queryDaily := fmt.Sprintf(`
-		SELECT
-			SUBSTR(requested_at, 1, 10) as day,
-			COUNT(*),
-			COALESCE(SUM(CASE WHEN failed = 1 THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(total_tokens), 0)
-		FROM usage_records
-		%s
-		GROUP BY day
-		ORDER BY day ASC
-		LIMIT 60
-	`, where)
-
-	dRows, err := s.db.Query(queryDaily, args...)
-	if err != nil {
-		return nil, fmt.Errorf("query daily trend: %w", err)
-	}
-	defer dRows.Close()
-
-	for dRows.Next() {
-		var d model.DailyStat
-		if err := dRows.Scan(&d.Date, &d.TotalRequests, &d.FailedRequests, &d.TotalTokens); err != nil {
-			return nil, fmt.Errorf("scan daily stat: %w", err)
-		}
-		resp.DailyStats = append(resp.DailyStats, d)
-	}
-
-	return resp, nil
+	return stats, rows.Err()
 }
 
 // GetRecords returns paginated usage records.
@@ -368,27 +323,19 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 
 	where, args := buildWhere(filter)
 
-	// Count total
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM usage_records %s", where)
 	var total int64
-	if err := s.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM usage_records "+where, args...).Scan(&total); err != nil {
 		return nil, fmt.Errorf("count records: %w", err)
 	}
 
-	page := filter.Page
-	if page < 1 {
-		page = 1
-	}
+	page := max(filter.Page, 1)
 	pageSize := filter.PageSize
 	if pageSize <= 0 {
 		pageSize = 20
-	} else if pageSize > 100 {
-		pageSize = 100
 	}
+	pageSize = min(pageSize, 100)
 
-	offset := (page - 1) * pageSize
-
-	query := fmt.Sprintf(`
+	rows, err := s.db.Query(fmt.Sprintf(`
 		SELECT
 			id, request_id, trace_id, provider, model, alias, api_key, auth_id, auth_type, source,
 			stream, requested_at, latency_ms, ttft_ms, failed, status_code, COALESCE(failure_body, ''),
@@ -397,10 +344,7 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 		%s
 		ORDER BY id DESC
 		LIMIT ? OFFSET ?
-	`, where)
-
-	queryArgs := append(args, pageSize, offset)
-	rows, err := s.db.Query(query, queryArgs...)
+	`, where), append(args, pageSize, (page-1)*pageSize)...)
 	if err != nil {
 		return nil, fmt.Errorf("query records: %w", err)
 	}
@@ -409,9 +353,6 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 	items := make([]model.StoredRecord, 0, pageSize)
 	for rows.Next() {
 		var r model.StoredRecord
-		var streamVal, failedVal int
-		var reqAtStr string
-
 		err := rows.Scan(
 			&r.ID,
 			&r.RequestID,
@@ -423,11 +364,11 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 			&r.AuthID,
 			&r.AuthType,
 			&r.Source,
-			&streamVal,
-			&reqAtStr,
+			&r.Stream,
+			&r.RequestedAt,
 			&r.LatencyMs,
 			&r.TTFTMs,
-			&failedVal,
+			&r.Failed,
 			&r.StatusCode,
 			&r.FailureBody,
 			&r.InputTokens,
@@ -439,16 +380,10 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 		if err != nil {
 			return nil, fmt.Errorf("scan record: %w", err)
 		}
-
-		r.Stream = streamVal == 1
-		r.Failed = failedVal == 1
-		t, parseErr := time.Parse("2006-01-02 15:04:05.000", reqAtStr)
-		if parseErr != nil {
-			t, _ = time.Parse("2006-01-02 15:04:05", reqAtStr)
-		}
-		r.RequestedAt = t
-
 		items = append(items, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate records: %w", err)
 	}
 
 	return &model.RecordListResponse{
@@ -457,48 +392,6 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 		PageSize: pageSize,
 		Items:    items,
 	}, nil
-}
-
-// GetDistinctModels returns list of existing model names.
-func (s *Storage) GetDistinctModels() ([]string, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	rows, err := s.db.Query("SELECT DISTINCT model FROM usage_records WHERE model != '' ORDER BY model ASC")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var models []string
-	for rows.Next() {
-		var m string
-		if err := rows.Scan(&m); err == nil {
-			models = append(models, m)
-		}
-	}
-	return models, nil
-}
-
-// GetDistinctProviders returns list of existing provider names.
-func (s *Storage) GetDistinctProviders() ([]string, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	rows, err := s.db.Query("SELECT DISTINCT provider FROM usage_records WHERE provider != '' ORDER BY provider ASC")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var providers []string
-	for rows.Next() {
-		var p string
-		if err := rows.Scan(&p); err == nil {
-			providers = append(providers, p)
-		}
-	}
-	return providers, nil
 }
 
 // CleanRetention removes records older than retentionDays.
@@ -510,7 +403,7 @@ func (s *Storage) CleanRetention(retentionDays int) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	cutoff := time.Now().AddDate(0, 0, -retentionDays).Format("2006-01-02 15:04:05")
+	cutoff := time.Now().AddDate(0, 0, -retentionDays).Format(timeLayout)
 	res, err := s.db.Exec("DELETE FROM usage_records WHERE requested_at < ?", cutoff)
 	if err != nil {
 		return 0, fmt.Errorf("clean retention: %w", err)

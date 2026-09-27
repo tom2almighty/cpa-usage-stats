@@ -3,98 +3,94 @@ package plugin
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"cpa-usage-stats/internal/handler"
 	"cpa-usage-stats/internal/model"
 )
 
+// hostRegistration mirrors the fields CLIProxyAPI's validPlugin checks after
+// both plugin.register and plugin.reconfigure.
+type hostRegistration struct {
+	SchemaVersion uint32 `json:"schema_version"`
+	Metadata      struct {
+		Name, Version, Author, GitHubRepository string
+	} `json:"metadata"`
+	Capabilities map[string]bool `json:"capabilities"`
+}
+
+func call(t *testing.T, method string, req any) json.RawMessage {
+	t.Helper()
+	payload, _ := json.Marshal(req)
+	raw, err := GetInstance().HandleCall(method, payload)
+	if err != nil {
+		t.Fatalf("%s: %v", method, err)
+	}
+	var env model.Envelope
+	if err := json.Unmarshal(raw, &env); err != nil || !env.OK {
+		t.Fatalf("%s: envelope %s", method, raw)
+	}
+	return env.Result
+}
+
+func manage(t *testing.T, path string, query map[string][]string) model.ManagementResponse {
+	t.Helper()
+	var resp model.ManagementResponse
+	result := call(t, "management.handle", model.ManagementRequest{Method: "GET", Path: path, Query: query})
+	if err := json.Unmarshal(result, &resp); err != nil {
+		t.Fatalf("decode management response: %v", err)
+	}
+	return resp
+}
+
 func TestPluginLifecycle(t *testing.T) {
-	tempDir := t.TempDir()
-	dbPath := filepath.Join(tempDir, "test_plugin.db")
+	GetInstance().SetEmbeddedHTML([]byte("<!doctype html><title>dashboard</title>"))
+	cfgYAML := []byte("db_path: " + filepath.Join(t.TempDir(), "usage.db") + "\nbatch_size: 1\nflush_interval_ms: 50\n")
 
-	instance := GetInstance()
-
-	// 1. Test plugin.register
-	configYAML := "db_path: " + dbPath + "\nbatch_size: 2\nflush_interval_ms: 100\n"
-	regReq, _ := json.Marshal(map[string]string{"config_yaml": configYAML})
-
-	regRespRaw, err := instance.HandleCall("plugin.register", regReq)
-	if err != nil {
-		t.Fatalf("plugin.register failed: %v", err)
-	}
-
-	var regEnv model.Envelope
-	if err := json.Unmarshal(regRespRaw, &regEnv); err != nil {
-		t.Fatalf("unmarshal register envelope failed: %v", err)
-	}
-	if !regEnv.OK {
-		t.Fatalf("expected register ok=true, got false: %v", regEnv.Error)
-	}
-
-	// 2. Test management.register
-	mgmtRegRespRaw, err := instance.HandleCall("management.register", nil)
-	if err != nil {
-		t.Fatalf("management.register failed: %v", err)
-	}
-	var mgmtRegEnv model.Envelope
-	_ = json.Unmarshal(mgmtRegRespRaw, &mgmtRegEnv)
-	if !mgmtRegEnv.OK {
-		t.Fatalf("expected management.register ok=true")
+	// Startup calls register once, then reconfigure on every later config
+	// apply. An empty reconfigure reply made the host unregister the plugin.
+	for _, tc := range []struct {
+		method     string
+		hostSchema uint32
+		wantSchema uint32
+	}{
+		{"plugin.register", 6, 6},
+		{"plugin.reconfigure", 6, 6},
+		{"plugin.reconfigure", 1, 1},
+	} {
+		var reg hostRegistration
+		result := call(t, tc.method, map[string]any{"config_yaml": cfgYAML, "schema_version": tc.hostSchema})
+		if err := json.Unmarshal(result, &reg); err != nil {
+			t.Fatalf("%s: decode: %v", tc.method, err)
+		}
+		m := reg.Metadata
+		if m.Name == "" || m.Version == "" || m.Author == "" || m.GitHubRepository == "" || !reg.Capabilities["usage_plugin"] {
+			t.Fatalf("%s: host would reject registration %+v", tc.method, reg)
+		}
+		if reg.SchemaVersion != tc.wantSchema {
+			t.Errorf("%s with host schema %d: got schema %d, want %d", tc.method, tc.hostSchema, reg.SchemaVersion, tc.wantSchema)
+		}
 	}
 
-	// 3. Test usage.handle
-	record := model.UsageRecord{
-		RequestID: "req-test-1",
-		Provider:  "openai",
-		Model:     "gpt-5",
-		Detail: model.UsageDetail{
-			TotalTokens: 100,
-		},
-	}
-	recordBytes, _ := json.Marshal(record)
-	usageRespRaw, err := instance.HandleCall("usage.handle", recordBytes)
-	if err != nil {
-		t.Fatalf("usage.handle failed: %v", err)
-	}
-	var usageEnv model.Envelope
-	_ = json.Unmarshal(usageRespRaw, &usageEnv)
-	if !usageEnv.OK {
-		t.Fatalf("expected usage.handle ok=true")
-	}
-
-	// Wait for worker batch flush
+	call(t, "usage.handle", model.UsageRecord{RequestID: "req-1", Model: "gpt-5", RequestedAt: time.Now(), Detail: model.UsageDetail{TotalTokens: 100}})
 	time.Sleep(200 * time.Millisecond)
 
-	// 4. Test management.handle (query summary)
-	mgmtReq := model.ManagementRequest{
-		Method: "GET",
-		Path:   "/v0/resource/plugins/cpa-usage-stats/dashboard",
-		Query:  map[string][]string{"action": {"summary"}},
-	}
-	mgmtReqBytes, _ := json.Marshal(mgmtReq)
-	mgmtHandleRespRaw, err := instance.HandleCall("management.handle", mgmtReqBytes)
-	if err != nil {
-		t.Fatalf("management.handle failed: %v", err)
-	}
-	var mgmtHandleEnv model.Envelope
-	_ = json.Unmarshal(mgmtHandleRespRaw, &mgmtHandleEnv)
-	if !mgmtHandleEnv.OK {
-		t.Fatalf("expected management.handle ok=true")
-	}
-
-	var mgmtResp model.ManagementResponse
-	_ = json.Unmarshal(mgmtHandleEnv.Result, &mgmtResp)
-	if mgmtResp.StatusCode != 200 {
-		t.Errorf("expected status code 200, got %d", mgmtResp.StatusCode)
-	}
-
+	resp := manage(t, handler.APIBasePath+"/summary", map[string][]string{"range": {"today"}})
 	var summary model.SummaryResponse
-	_ = json.Unmarshal(mgmtResp.Body, &summary)
-	if summary.TotalRequests != 1 {
-		t.Errorf("expected 1 total request in summary, got %d", summary.TotalRequests)
+	if err := json.Unmarshal(resp.Body, &summary); err != nil || resp.StatusCode != 200 {
+		t.Fatalf("summary: status %d body %s", resp.StatusCode, resp.Body)
+	}
+	if summary.TotalRequests != 1 || summary.TotalTokens != 100 || summary.Bucket != "hour" {
+		t.Errorf("summary = %+v", summary)
 	}
 
-	// 5. Test shutdown
-	_, _ = instance.HandleCall("plugin.shutdown", nil)
+	// The resource route is unauthenticated: it must never answer with data.
+	resp = manage(t, "/v0/resource/plugins/cpa-usage-stats/dashboard", map[string][]string{"action": {"records"}})
+	if !strings.HasPrefix(resp.Headers.Get("Content-Type"), "text/html") || strings.Contains(string(resp.Body), "req-1") {
+		t.Errorf("resource route leaked data: %s %s", resp.Headers.Get("Content-Type"), resp.Body)
+	}
+
+	call(t, "plugin.shutdown", nil)
 }

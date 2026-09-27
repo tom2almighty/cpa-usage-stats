@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -25,7 +25,7 @@ jobs:
           bun run build
 
       - name: Upload frontend artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-dist
           path: web/dist/index.html
@@ -60,16 +60,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: 'go.mod'
           cache: true
 
       - name: Download frontend dist
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: frontend-dist
           path: web/dist
@@ -91,7 +91,7 @@ jobs:
           fi
 
           echo "==> Building CGO shared library: ${LIB_NAME} for ${{ matrix.goos }}/${{ matrix.goarch }}..."
-          go build -buildmode=c-shared -ldflags="-s -w" -o "${LIB_NAME}" .
+          go build -buildmode=c-shared -ldflags="-s -w -X cpa-usage-stats/internal/plugin.Version=${VERSION}" -o "${LIB_NAME}" .
           rm -f "cpa-usage-stats.h"
 
           echo "==> Packaging into ${ZIP_NAME}..."
@@ -99,7 +99,7 @@ jobs:
           rm -f "${LIB_NAME}"
 
       - name: Upload platform zip
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
@@ -110,10 +110,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Download all release artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           path: all-artifacts
 
@@ -129,7 +129,7 @@ jobs:
           cat release-assets/checksums.txt
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             release-assets/*.zip

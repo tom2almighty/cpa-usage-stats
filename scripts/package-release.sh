@@ -27,7 +27,7 @@ LIB_NAME="${PLUGIN_ID}.${EXT}"
 ZIP_NAME="${PLUGIN_ID}_${VERSION}_${GOOS}_${GOARCH}.zip"
 
 echo "==> Step 2: Compiling shared library: ${LIB_NAME}..."
-CGO_ENABLED=1 go build -buildmode=c-shared -ldflags="-s -w" -o "${LIB_NAME}" .
+CGO_ENABLED=1 go build -buildmode=c-shared -ldflags="-s -w -X cpa-usage-stats/internal/plugin.Version=${VERSION}" -o "${LIB_NAME}" .
 rm -f "${PLUGIN_ID}.h"
 
 echo "==> Step 3: Packaging to ${DIST_DIR}/${ZIP_NAME} with Go packager..."

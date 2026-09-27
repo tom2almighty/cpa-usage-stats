@@ -21,7 +21,6 @@ func TestWorkerBatchAndFlush(t *testing.T) {
 	defer store.Close()
 
 	cfg := config.Config{
-		Enabled:         true,
 		BatchSize:       5,
 		FlushIntervalMs: 100,
 		ChannelSize:     100,
@@ -47,7 +46,7 @@ func TestWorkerBatchAndFlush(t *testing.T) {
 	// Wait for ticker flush
 	time.Sleep(250 * time.Millisecond)
 
-	summary, err := store.GetSummary(model.UsageFilter{})
+	summary, err := store.GetSummary(model.UsageFilter{}, false)
 	if err != nil {
 		t.Fatalf("GetSummary error: %v", err)
 	}
@@ -60,7 +59,7 @@ func TestWorkerBatchAndFlush(t *testing.T) {
 	w.Enqueue(model.UsageRecord{RequestID: "req-5", Model: "gpt-5"})
 	w.Stop()
 
-	summaryAfter, err := store.GetSummary(model.UsageFilter{})
+	summaryAfter, err := store.GetSummary(model.UsageFilter{}, false)
 	if err != nil {
 		t.Fatalf("GetSummary after stop error: %v", err)
 	}

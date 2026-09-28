@@ -14,6 +14,9 @@ import (
 
 const (
 	timeLayout = "2006-01-02 15:04:05.000"
+	// schemaVersion gates table layout: 2 is the v8 plugin schema. Databases
+	// created before it are dropped and rebuilt (pre-v8 data is not migrated).
+	schemaVersion = 2
 	// Upstream error pages can be large HTML documents; keep enough to debug.
 	maxFailureBody = 4 << 10
 )
@@ -59,40 +62,67 @@ func (s *Storage) Close() error {
 }
 
 func (s *Storage) initSchema() error {
+	var version int
+	if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		return fmt.Errorf("read user_version: %w", err)
+	}
+	if version >= schemaVersion {
+		return nil
+	}
+
+	// Legacy layouts (user_version 0 covers both fresh databases and the old
+	// pre-v8 table) are dropped and rebuilt; old data is intentionally discarded.
 	schema := `
-	CREATE TABLE IF NOT EXISTS usage_records (
+	DROP TABLE IF EXISTS usage_records;
+
+	CREATE TABLE usage_records (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		request_id TEXT NOT NULL,
 		trace_id TEXT,
+		session_id TEXT,
 		provider TEXT,
+		base_url TEXT,
 		model TEXT,
+		response_model TEXT,
 		alias TEXT,
 		api_key TEXT,
 		auth_id TEXT,
+		auth_index TEXT,
 		auth_type TEXT,
 		source TEXT,
-		stream INTEGER,
+		reasoning_effort TEXT,
+		service_tier TEXT,
+		response_service_tier TEXT,
+		stream INTEGER NOT NULL DEFAULT 0,
+		generate INTEGER NOT NULL DEFAULT 1,
 		requested_at DATETIME NOT NULL,
-		latency_ms INTEGER,
-		ttft_ms INTEGER,
-		failed INTEGER,
-		status_code INTEGER,
+		latency_ms INTEGER NOT NULL DEFAULT 0,
+		ttft_ms INTEGER NOT NULL DEFAULT 0,
+		failed INTEGER NOT NULL DEFAULT 0,
+		status_code INTEGER NOT NULL DEFAULT 0,
 		failure_body TEXT,
-		input_tokens INTEGER,
-		output_tokens INTEGER,
-		reasoning_tokens INTEGER,
-		cached_tokens INTEGER,
-		total_tokens INTEGER
+		input_tokens INTEGER NOT NULL DEFAULT 0,
+		output_tokens INTEGER NOT NULL DEFAULT 0,
+		reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+		cached_tokens INTEGER NOT NULL DEFAULT 0,
+		cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+		cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+		total_tokens INTEGER NOT NULL DEFAULT 0
 	);
 
-	CREATE INDEX IF NOT EXISTS idx_usage_requested_at ON usage_records(requested_at);
-	CREATE INDEX IF NOT EXISTS idx_usage_model ON usage_records(model);
-	CREATE INDEX IF NOT EXISTS idx_usage_provider ON usage_records(provider);
-	CREATE INDEX IF NOT EXISTS idx_usage_api_key ON usage_records(api_key);
-	CREATE INDEX IF NOT EXISTS idx_usage_failed ON usage_records(failed);
+	CREATE INDEX idx_usage_requested_at ON usage_records(requested_at);
+	CREATE INDEX idx_usage_model ON usage_records(model);
+	CREATE INDEX idx_usage_provider ON usage_records(provider);
+	CREATE INDEX idx_usage_api_key ON usage_records(api_key);
+	CREATE INDEX idx_usage_session ON usage_records(session_id);
+	CREATE INDEX idx_usage_failed ON usage_records(failed);
+
+	PRAGMA user_version = ` + fmt.Sprint(schemaVersion) + `;
 	`
-	_, err := s.db.Exec(schema)
-	return err
+	if _, err := s.db.Exec(schema); err != nil {
+		return fmt.Errorf("create schema: %w", err)
+	}
+	return nil
 }
 
 // InsertBatch inserts multiple usage records in a single transaction.
@@ -112,10 +142,15 @@ func (s *Storage) InsertBatch(records []model.UsageRecord) error {
 
 	stmt, err := tx.Prepare(`
 		INSERT INTO usage_records (
-			request_id, trace_id, provider, model, alias, api_key, auth_id, auth_type, source,
-			stream, requested_at, latency_ms, ttft_ms, failed, status_code, failure_body,
-			input_tokens, output_tokens, reasoning_tokens, cached_tokens, total_tokens
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			request_id, trace_id, session_id, provider, base_url,
+			model, response_model, alias, api_key,
+			auth_id, auth_index, auth_type, source,
+			reasoning_effort, service_tier, response_service_tier,
+			stream, generate, requested_at, latency_ms, ttft_ms,
+			failed, status_code, failure_body,
+			input_tokens, output_tokens, reasoning_tokens,
+			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare insert: %w", err)
@@ -135,14 +170,22 @@ func (s *Storage) InsertBatch(records []model.UsageRecord) error {
 		_, err := stmt.Exec(
 			r.RequestID,
 			r.TraceID,
+			r.SessionID,
 			r.Provider,
+			r.BaseURL,
 			r.Model,
+			r.ResponseModel,
 			r.Alias,
 			r.APIKey,
 			r.AuthID,
+			r.AuthIndex,
 			r.AuthType,
 			r.Source,
+			r.ReasoningEffort,
+			r.ServiceTier,
+			r.ResponseServiceTier,
 			r.Stream,
+			r.Generate,
 			// Stored as server-local wall time so day/hour buckets match the
 			// time ranges computed in handler.
 			reqAt.Local().Format(timeLayout),
@@ -155,6 +198,8 @@ func (s *Storage) InsertBatch(records []model.UsageRecord) error {
 			r.Detail.OutputTokens,
 			r.Detail.ReasoningTokens,
 			r.Detail.CachedTokens,
+			r.Detail.CacheReadTokens,
+			r.Detail.CacheCreationTokens,
 			r.Detail.TotalTokens,
 		)
 		if err != nil {
@@ -198,8 +243,8 @@ func buildWhere(filter model.UsageFilter) (string, []interface{}) {
 	}
 	if filter.Keyword != "" {
 		kw := "%" + filter.Keyword + "%"
-		clauses = append(clauses, "(request_id LIKE ? OR trace_id LIKE ? OR model LIKE ? OR alias LIKE ? OR api_key LIKE ? OR failure_body LIKE ?)")
-		args = append(args, kw, kw, kw, kw, kw, kw)
+		clauses = append(clauses, "(request_id LIKE ? OR trace_id LIKE ? OR session_id LIKE ? OR model LIKE ? OR alias LIKE ? OR api_key LIKE ? OR failure_body LIKE ?)")
+		args = append(args, kw, kw, kw, kw, kw, kw, kw)
 	}
 
 	where := ""
@@ -227,6 +272,8 @@ func (s *Storage) GetSummary(filter model.UsageFilter, hourly bool) (*model.Summ
 			COALESCE(SUM(output_tokens), 0),
 			COALESCE(SUM(reasoning_tokens), 0),
 			COALESCE(SUM(cached_tokens), 0),
+			COALESCE(SUM(cache_read_tokens), 0),
+			COALESCE(SUM(cache_creation_tokens), 0),
 			COALESCE(AVG(latency_ms), 0),
 			COALESCE(AVG(CASE WHEN stream = 1 AND ttft_ms > 0 THEN ttft_ms END), 0)
 		FROM usage_records %s
@@ -238,20 +285,28 @@ func (s *Storage) GetSummary(filter model.UsageFilter, hourly bool) (*model.Summ
 		&resp.OutputTokens,
 		&resp.ReasoningTokens,
 		&resp.CachedTokens,
+		&resp.CacheReadTokens,
+		&resp.CacheCreationTokens,
 		&resp.AvgLatencyMs,
 		&resp.AvgTTFTMs,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query total summary: %w", err)
 	}
+	resp.SuccessRequests = resp.TotalRequests - resp.FailedRequests
+	if resp.TotalRequests > 0 {
+		resp.SuccessRate = float64(resp.SuccessRequests) / float64(resp.TotalRequests) * 100
+	} else {
+		resp.SuccessRate = 100
+	}
 
-	if resp.Models, err = s.groupStats("model", where, args); err != nil {
+	if resp.Models, err = s.groupStats("model, provider", "model", where, args); err != nil {
 		return nil, err
 	}
-	if resp.Providers, err = s.groupStats("provider", where, args); err != nil {
+	if resp.Providers, err = s.groupStats("provider", "", where, args); err != nil {
 		return nil, err
 	}
-	if resp.APIKeys, err = s.groupStats("api_key", where, args); err != nil {
+	if resp.APIKeys, err = s.groupStats("api_key", "", where, args); err != nil {
 		return nil, err
 	}
 
@@ -262,7 +317,13 @@ func (s *Storage) GetSummary(filter model.UsageFilter, hourly bool) (*model.Summ
 		bucketLen = 13
 	}
 	rows, err := s.db.Query(fmt.Sprintf(`
-		SELECT SUBSTR(requested_at, 1, %d) AS bucket, COUNT(*), SUM(failed), COALESCE(SUM(total_tokens), 0)
+		SELECT
+			SUBSTR(requested_at, 1, %d) AS bucket,
+			COUNT(*),
+			COALESCE(SUM(failed), 0),
+			COALESCE(SUM(total_tokens), 0),
+			COALESCE(SUM(input_tokens), 0),
+			COALESCE(SUM(output_tokens), 0)
 		FROM usage_records %s
 		GROUP BY bucket
 		ORDER BY bucket
@@ -275,7 +336,7 @@ func (s *Storage) GetSummary(filter model.UsageFilter, hourly bool) (*model.Summ
 	resp.Trend = []model.TrendPoint{}
 	for rows.Next() {
 		var p model.TrendPoint
-		if err := rows.Scan(&p.Bucket, &p.Requests, &p.Failed, &p.Tokens); err != nil {
+		if err := rows.Scan(&p.Bucket, &p.Requests, &p.Failed, &p.Tokens, &p.InputTokens, &p.OutputTokens); err != nil {
 			return nil, fmt.Errorf("scan trend: %w", err)
 		}
 		resp.Trend = append(resp.Trend, p)
@@ -283,34 +344,57 @@ func (s *Storage) GetSummary(filter model.UsageFilter, hourly bool) (*model.Summ
 	return resp, rows.Err()
 }
 
-// groupStats aggregates usage by one column. column is a fixed identifier from
-// GetSummary, never user input.
-func (s *Storage) groupStats(column, where string, args []interface{}) ([]model.GroupStat, error) {
+// groupStats aggregates usage by one dimension. groupBy is a fixed column list
+// from GetSummary, never user input; secondary selects the second group column
+// carried into GroupStat.Secondary (empty for single-column grouping).
+func (s *Storage) groupStats(groupBy, secondary, where string, args []interface{}) ([]model.GroupStat, error) {
 	rows, err := s.db.Query(fmt.Sprintf(`
 		SELECT
-			COALESCE(%[1]s, ''),
+			%s,
 			COUNT(*) AS requests,
-			SUM(failed),
+			COALESCE(SUM(failed), 0),
 			COALESCE(SUM(total_tokens), 0) AS tokens,
 			COALESCE(SUM(input_tokens), 0),
 			COALESCE(SUM(output_tokens), 0),
+			COALESCE(SUM(reasoning_tokens), 0),
 			COALESCE(SUM(cached_tokens), 0),
+			COALESCE(SUM(cache_read_tokens), 0),
+			COALESCE(SUM(cache_creation_tokens), 0),
 			COALESCE(AVG(latency_ms), 0)
 		FROM usage_records %[2]s
 		GROUP BY %[1]s
 		ORDER BY tokens DESC, requests DESC
-	`, column, where), args...)
+	`, groupBy, where), args...)
 	if err != nil {
-		return nil, fmt.Errorf("query %s stats: %w", column, err)
+		return nil, fmt.Errorf("query %s stats: %w", groupBy, err)
 	}
 	defer rows.Close()
 
 	stats := []model.GroupStat{}
 	for rows.Next() {
 		var g model.GroupStat
-		if err := rows.Scan(&g.Name, &g.Requests, &g.Failed, &g.TotalTokens, &g.InputTokens, &g.OutputTokens, &g.CachedTokens, &g.AvgLatencyMs); err != nil {
-			return nil, fmt.Errorf("scan %s stats: %w", column, err)
+		var name, sec string
+		dest := []any{&name}
+		if secondary != "" {
+			dest = append(dest, &sec)
 		}
+		dest = append(dest,
+			&g.Requests,
+			&g.Failed,
+			&g.TotalTokens,
+			&g.InputTokens,
+			&g.OutputTokens,
+			&g.ReasoningTokens,
+			&g.CachedTokens,
+			&g.CacheReadTokens,
+			&g.CacheCreationTokens,
+			&g.AvgLatencyMs,
+		)
+		if err := rows.Scan(dest...); err != nil {
+			return nil, fmt.Errorf("scan %s stats: %w", groupBy, err)
+		}
+		g.Name = name
+		g.Secondary = sec
 		stats = append(stats, g)
 	}
 	return stats, rows.Err()
@@ -337,9 +421,14 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 
 	rows, err := s.db.Query(fmt.Sprintf(`
 		SELECT
-			id, request_id, trace_id, provider, model, alias, api_key, auth_id, auth_type, source,
-			stream, requested_at, latency_ms, ttft_ms, failed, status_code, COALESCE(failure_body, ''),
-			input_tokens, output_tokens, reasoning_tokens, cached_tokens, total_tokens
+			id, request_id, trace_id, session_id, provider, base_url,
+			model, response_model, alias, api_key,
+			auth_id, auth_index, auth_type, source,
+			reasoning_effort, service_tier, response_service_tier,
+			stream, generate, requested_at, latency_ms, ttft_ms,
+			failed, status_code, COALESCE(failure_body, ''),
+			input_tokens, output_tokens, reasoning_tokens,
+			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens
 		FROM usage_records
 		%s
 		ORDER BY id DESC
@@ -353,18 +442,26 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 	items := make([]model.StoredRecord, 0, pageSize)
 	for rows.Next() {
 		var r model.StoredRecord
-		err := rows.Scan(
+		if err := rows.Scan(
 			&r.ID,
 			&r.RequestID,
 			&r.TraceID,
+			&r.SessionID,
 			&r.Provider,
+			&r.BaseURL,
 			&r.Model,
+			&r.ResponseModel,
 			&r.Alias,
 			&r.APIKey,
 			&r.AuthID,
+			&r.AuthIndex,
 			&r.AuthType,
 			&r.Source,
+			&r.ReasoningEffort,
+			&r.ServiceTier,
+			&r.ResponseServiceTier,
 			&r.Stream,
+			&r.Generate,
 			&r.RequestedAt,
 			&r.LatencyMs,
 			&r.TTFTMs,
@@ -375,9 +472,10 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 			&r.OutputTokens,
 			&r.ReasoningTokens,
 			&r.CachedTokens,
+			&r.CacheReadTokens,
+			&r.CacheCreationTokens,
 			&r.TotalTokens,
-		)
-		if err != nil {
+		); err != nil {
 			return nil, fmt.Errorf("scan record: %w", err)
 		}
 		items = append(items, r)
@@ -392,6 +490,43 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 		PageSize: pageSize,
 		Items:    items,
 	}, nil
+}
+
+// GetOptions returns distinct non-empty filter values for dashboard dropdowns.
+func (s *Storage) GetOptions() (*model.OptionsResponse, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	distinct := func(column string) ([]string, error) {
+		rows, err := s.db.Query(fmt.Sprintf(
+			"SELECT DISTINCT %s FROM usage_records WHERE %s != '' ORDER BY %s", column, column, column))
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		values := []string{}
+		for rows.Next() {
+			var v string
+			if err := rows.Scan(&v); err != nil {
+				return nil, err
+			}
+			values = append(values, v)
+		}
+		return values, rows.Err()
+	}
+
+	var err error
+	resp := &model.OptionsResponse{}
+	if resp.Models, err = distinct("model"); err != nil {
+		return nil, fmt.Errorf("query model options: %w", err)
+	}
+	if resp.Providers, err = distinct("provider"); err != nil {
+		return nil, fmt.Errorf("query provider options: %w", err)
+	}
+	if resp.APIKeys, err = distinct("api_key"); err != nil {
+		return nil, fmt.Errorf("query api_key options: %w", err)
+	}
+	return resp, nil
 }
 
 // CleanRetention removes records older than retentionDays.

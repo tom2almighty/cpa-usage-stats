@@ -16,10 +16,10 @@ import (
 // Version is injected at build time: -ldflags "-X cpa-usage-stats/internal/plugin.Version=1.2.3".
 var Version = "dev"
 
-// rawManagementSchema is the first host schema that stops HTML-escaping
-// strings in management JSON responses. Older hosts reject schema versions
-// they do not know, so it is only claimed when the host advertises it.
-const rawManagementSchema = 6
+// rpcSchema is the RPC schema this plugin speaks. It is always claimed so the
+// plugin requires a host from the v8 era; schema 6 also stops the host from
+// HTML-escaping strings in management JSON responses.
+const rpcSchema = 6
 
 // Instance is the singleton plugin instance.
 type Instance struct {
@@ -57,6 +57,9 @@ func (p *Instance) HandleCall(method string, payload []byte) ([]byte, error) {
 		// The host validates both replies identically: a reconfigure reply
 		// without metadata/capabilities drops the plugin from the runtime.
 		return p.handleRegister(payload)
+	case "plugin.quiesce":
+		p.handleQuiesce()
+		return okEnvelope(struct{}{})
 	case "plugin.shutdown":
 		p.handleShutdown()
 		return okEnvelope(struct{}{})
@@ -103,6 +106,7 @@ var configFields = []configFieldInfo{
 	{Name: "flush_interval_ms", Type: "integer", Description: "批量写入最长间隔毫秒数 (默认 1000)"},
 	{Name: "channel_size", Type: "integer", Description: "内存缓冲队列容量，满了会丢弃新记录 (默认 10000)"},
 	{Name: "retention_days", Type: "integer", Description: "数据保留天数，0 为永久保存 (默认 90)"},
+	{Name: "exclude_models", Type: "array", Description: "不记录的模型或别名列表"},
 	{Name: "dashboard_path", Type: "string", Description: "看板资源路径 (默认 /dashboard)"},
 	{Name: "dashboard_title", Type: "string", Description: "管理中心菜单名称 (默认 用量统计看板)"},
 }
@@ -123,12 +127,8 @@ func (p *Instance) handleRegister(payload []byte) ([]byte, error) {
 		return errorEnvelope("storage_unavailable", err.Error()), nil
 	}
 
-	schema := uint32(1)
-	if req.SchemaVersion >= rawManagementSchema {
-		schema = rawManagementSchema
-	}
 	return okEnvelope(registerResponse{
-		SchemaVersion: schema,
+		SchemaVersion: rpcSchema,
 		Metadata: metadataResponse{
 			Name:             "cpa-usage-stats",
 			Version:          Version,
@@ -205,8 +205,21 @@ func (p *Instance) handleManagementRegister() ([]byte, error) {
 		Routes: []model.ManagementRoute{
 			{Method: http.MethodGet, Path: handler.APIBasePath + "/summary", Description: "用量聚合统计"},
 			{Method: http.MethodGet, Path: handler.APIBasePath + "/records", Description: "调用明细分页"},
+			{Method: http.MethodGet, Path: handler.APIBasePath + "/options", Description: "筛选下拉选项"},
 		},
 	})
+}
+
+// handleQuiesce drains buffered records into storage before a hot reload
+// replaces this plugin instance. Storage stays open for the host's shutdown.
+func (p *Instance) handleQuiesce() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.worker != nil {
+		p.worker.Stop()
+		p.worker = nil
+	}
+	log.Printf("[cpa-usage-stats] quiesced: buffered usage records flushed")
 }
 
 func (p *Instance) handleManagementHandle(payload []byte) ([]byte, error) {

@@ -39,6 +39,12 @@ func Handle(store *storage.Storage, html []byte, req model.ManagementRequest) mo
 			return jsonError(http.StatusInternalServerError, "query_records_failed", err.Error())
 		}
 		return jsonOK(records)
+	case "/options":
+		options, err := store.GetOptions()
+		if err != nil {
+			return jsonError(http.StatusInternalServerError, "query_options_failed", err.Error())
+		}
+		return jsonOK(options)
 	default:
 		return jsonError(http.StatusNotFound, "not_found", "unknown endpoint")
 	}

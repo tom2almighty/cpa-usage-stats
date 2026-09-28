@@ -58,7 +58,10 @@ func TestPluginLifecycle(t *testing.T) {
 	}{
 		{"plugin.register", 6, 6},
 		{"plugin.reconfigure", 6, 6},
-		{"plugin.reconfigure", 1, 1},
+		// The plugin speaks v8 only: it claims its schema regardless of what
+		// an older host advertises, so pre-v8 hosts drop it instead of
+		// silently mis-decoding management responses.
+		{"plugin.reconfigure", 1, 6},
 	} {
 		var reg hostRegistration
 		result := call(t, tc.method, map[string]any{"config_yaml": cfgYAML, "schema_version": tc.hostSchema})
@@ -74,7 +77,7 @@ func TestPluginLifecycle(t *testing.T) {
 		}
 	}
 
-	call(t, "usage.handle", model.UsageRecord{RequestID: "req-1", Model: "gpt-5", RequestedAt: time.Now(), Detail: model.UsageDetail{TotalTokens: 100}})
+	call(t, "usage.handle", model.UsageRecord{RequestID: "req-1", Model: "gpt-5", SessionID: "sess-1", ResponseModel: "gpt-5.2", RequestedAt: time.Now(), Detail: model.UsageDetail{TotalTokens: 100, CacheReadTokens: 30}})
 	time.Sleep(200 * time.Millisecond)
 
 	resp := manage(t, handler.APIBasePath+"/summary", map[string][]string{"range": {"today"}})
@@ -84,6 +87,43 @@ func TestPluginLifecycle(t *testing.T) {
 	}
 	if summary.TotalRequests != 1 || summary.TotalTokens != 100 || summary.Bucket != "hour" {
 		t.Errorf("summary = %+v", summary)
+	}
+	if summary.SuccessRequests != 1 || summary.SuccessRate != 100 {
+		t.Errorf("success accounting = %+v", summary)
+	}
+	if len(summary.Models) != 1 || summary.Models[0].Secondary != "" {
+		t.Errorf("model stats = %+v", summary.Models)
+	}
+
+	resp = manage(t, handler.APIBasePath+"/records", nil)
+	var records model.RecordListResponse
+	if err := json.Unmarshal(resp.Body, &records); err != nil || resp.StatusCode != 200 {
+		t.Fatalf("records: status %d body %s", resp.StatusCode, resp.Body)
+	}
+	if records.Total != 1 || records.Items[0].SessionID != "sess-1" || records.Items[0].ResponseModel != "gpt-5.2" {
+		t.Errorf("records = %+v", records)
+	}
+
+	resp = manage(t, handler.APIBasePath+"/options", nil)
+	var options model.OptionsResponse
+	if err := json.Unmarshal(resp.Body, &options); err != nil || resp.StatusCode != 200 {
+		t.Fatalf("options: status %d body %s", resp.StatusCode, resp.Body)
+	}
+	if len(options.Models) != 1 || options.Models[0] != "gpt-5" {
+		t.Errorf("options = %+v", options)
+	}
+
+	// Quiesce drains and stops the worker: later records are dropped, but the
+	// management API and storage stay alive until shutdown.
+	call(t, "plugin.quiesce", nil)
+	call(t, "usage.handle", model.UsageRecord{RequestID: "req-2", Model: "gpt-5", RequestedAt: time.Now()})
+	time.Sleep(120 * time.Millisecond)
+	resp = manage(t, handler.APIBasePath+"/records", nil)
+	if err := json.Unmarshal(resp.Body, &records); err != nil {
+		t.Fatalf("records after quiesce: %v", resp.Body)
+	}
+	if records.Total != 1 {
+		t.Errorf("quiesced plugin must drop new records, got total %d", records.Total)
 	}
 
 	// The resource route is unauthenticated: it must never answer with data.

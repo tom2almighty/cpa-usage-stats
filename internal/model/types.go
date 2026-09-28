@@ -20,7 +20,7 @@ type EnvelopeError struct {
 	Message string `json:"message"`
 }
 
-// UsageRecord describes request usage and billing metadata from CLIProxyAPI.
+// UsageRecord mirrors the host v8 UsageRecord delivered via usage.handle.
 type UsageRecord struct {
 	RequestID           string        `json:"RequestID,omitempty"`
 	TraceID             string        `json:"TraceID,omitempty"`
@@ -68,30 +68,41 @@ type UsageDetail struct {
 	TotalTokens         int64 `json:"TotalTokens"`
 }
 
-// StoredRecord represents a record stored in SQLite.
+// StoredRecord represents a record stored in SQLite and returned by the
+// records endpoint.
 type StoredRecord struct {
-	ID              int64     `json:"id"`
-	RequestID       string    `json:"request_id"`
-	TraceID         string    `json:"trace_id"`
-	Provider        string    `json:"provider"`
-	Model           string    `json:"model"`
-	Alias           string    `json:"alias"`
-	APIKey          string    `json:"api_key"`
-	AuthID          string    `json:"auth_id"`
-	AuthType        string    `json:"auth_type"`
-	Source          string    `json:"source"`
-	Stream          bool      `json:"stream"`
-	RequestedAt     time.Time `json:"requested_at"`
-	LatencyMs       int64     `json:"latency_ms"`
-	TTFTMs          int64     `json:"ttft_ms"`
-	Failed          bool      `json:"failed"`
-	StatusCode      int       `json:"status_code"`
-	FailureBody     string    `json:"failure_body,omitempty"`
-	InputTokens     int64     `json:"input_tokens"`
-	OutputTokens    int64     `json:"output_tokens"`
-	ReasoningTokens int64     `json:"reasoning_tokens"`
-	CachedTokens    int64     `json:"cached_tokens"`
-	TotalTokens     int64     `json:"total_tokens"`
+	ID                  int64     `json:"id"`
+	RequestID           string    `json:"request_id"`
+	TraceID             string    `json:"trace_id"`
+	SessionID           string    `json:"session_id"`
+	Provider            string    `json:"provider"`
+	BaseURL             string    `json:"base_url"`
+	Model               string    `json:"model"`
+	ResponseModel       string    `json:"response_model"`
+	Alias               string    `json:"alias"`
+	APIKey              string    `json:"api_key"`
+	AuthID              string    `json:"auth_id"`
+	AuthIndex           string    `json:"auth_index"`
+	AuthType            string    `json:"auth_type"`
+	Source              string    `json:"source"`
+	ReasoningEffort     string    `json:"reasoning_effort"`
+	ServiceTier         string    `json:"service_tier"`
+	ResponseServiceTier string    `json:"response_service_tier"`
+	Stream              bool      `json:"stream"`
+	Generate            bool      `json:"generate"`
+	RequestedAt         time.Time `json:"requested_at"`
+	LatencyMs           int64     `json:"latency_ms"`
+	TTFTMs              int64     `json:"ttft_ms"`
+	Failed              bool      `json:"failed"`
+	StatusCode          int       `json:"status_code"`
+	FailureBody         string    `json:"failure_body,omitempty"`
+	InputTokens         int64     `json:"input_tokens"`
+	OutputTokens        int64     `json:"output_tokens"`
+	ReasoningTokens     int64     `json:"reasoning_tokens"`
+	CachedTokens        int64     `json:"cached_tokens"`
+	CacheReadTokens     int64     `json:"cache_read_tokens"`
+	CacheCreationTokens int64     `json:"cache_creation_tokens"`
+	TotalTokens         int64     `json:"total_tokens"`
 }
 
 // ManagementRequest describes an incoming HTTP request via management API.
@@ -145,40 +156,51 @@ type UsageFilter struct {
 
 // SummaryResponse represents aggregated statistics for a time range.
 type SummaryResponse struct {
-	TotalRequests   int64        `json:"total_requests"`
-	FailedRequests  int64        `json:"failed_requests"`
-	TotalTokens     int64        `json:"total_tokens"`
-	InputTokens     int64        `json:"input_tokens"`
-	OutputTokens    int64        `json:"output_tokens"`
-	ReasoningTokens int64        `json:"reasoning_tokens"`
-	CachedTokens    int64        `json:"cached_tokens"`
-	AvgLatencyMs    float64      `json:"avg_latency_ms"`
-	AvgTTFTMs       float64      `json:"avg_ttft_ms"`
-	Models          []GroupStat  `json:"models"`
-	Providers       []GroupStat  `json:"providers"`
-	APIKeys         []GroupStat  `json:"api_keys"`
-	Bucket          string       `json:"bucket"`
-	Trend           []TrendPoint `json:"trend"`
+	TotalRequests       int64        `json:"total_requests"`
+	SuccessRequests     int64        `json:"success_requests"`
+	FailedRequests      int64        `json:"failed_requests"`
+	SuccessRate         float64      `json:"success_rate"`
+	TotalTokens         int64        `json:"total_tokens"`
+	InputTokens         int64        `json:"input_tokens"`
+	OutputTokens        int64        `json:"output_tokens"`
+	ReasoningTokens     int64        `json:"reasoning_tokens"`
+	CachedTokens        int64        `json:"cached_tokens"`
+	CacheReadTokens     int64        `json:"cache_read_tokens"`
+	CacheCreationTokens int64        `json:"cache_creation_tokens"`
+	AvgLatencyMs        float64      `json:"avg_latency_ms"`
+	AvgTTFTMs           float64      `json:"avg_ttft_ms"`
+	Models              []GroupStat  `json:"model_stats"`
+	Providers           []GroupStat  `json:"provider_stats"`
+	APIKeys             []GroupStat  `json:"api_key_stats"`
+	Bucket              string       `json:"bucket"`
+	Trend               []TrendPoint `json:"trend"`
 }
 
-// GroupStat aggregates usage for one model, provider or API key.
+// GroupStat aggregates usage by one dimension. Secondary carries the provider
+// when grouping by model, so one model can appear once per upstream.
 type GroupStat struct {
-	Name         string  `json:"name"`
-	Requests     int64   `json:"requests"`
-	Failed       int64   `json:"failed"`
-	TotalTokens  int64   `json:"total_tokens"`
-	InputTokens  int64   `json:"input_tokens"`
-	OutputTokens int64   `json:"output_tokens"`
-	CachedTokens int64   `json:"cached_tokens"`
-	AvgLatencyMs float64 `json:"avg_latency_ms"`
+	Name                string  `json:"name"`
+	Secondary           string  `json:"secondary,omitempty"`
+	Requests            int64   `json:"requests"`
+	Failed              int64   `json:"failed"`
+	TotalTokens         int64   `json:"total_tokens"`
+	InputTokens         int64   `json:"input_tokens"`
+	OutputTokens        int64   `json:"output_tokens"`
+	ReasoningTokens     int64   `json:"reasoning_tokens"`
+	CachedTokens        int64   `json:"cached_tokens"`
+	CacheReadTokens     int64   `json:"cache_read_tokens"`
+	CacheCreationTokens int64   `json:"cache_creation_tokens"`
+	AvgLatencyMs        float64 `json:"avg_latency_ms"`
 }
 
 // TrendPoint is one hour ("2006-01-02 15") or day ("2006-01-02") bucket.
 type TrendPoint struct {
-	Bucket   string `json:"bucket"`
-	Requests int64  `json:"requests"`
-	Failed   int64  `json:"failed"`
-	Tokens   int64  `json:"tokens"`
+	Bucket       string `json:"bucket"`
+	Requests     int64  `json:"requests"`
+	Failed       int64  `json:"failed"`
+	Tokens       int64  `json:"tokens"`
+	InputTokens  int64  `json:"input_tokens"`
+	OutputTokens int64  `json:"output_tokens"`
 }
 
 // RecordListResponse represents paginated records response.
@@ -187,4 +209,11 @@ type RecordListResponse struct {
 	Page     int            `json:"page"`
 	PageSize int            `json:"page_size"`
 	Items    []StoredRecord `json:"items"`
+}
+
+// OptionsResponse lists distinct filter values for dashboard dropdowns.
+type OptionsResponse struct {
+	Models    []string `json:"models"`
+	Providers []string `json:"providers"`
+	APIKeys   []string `json:"api_keys"`
 }

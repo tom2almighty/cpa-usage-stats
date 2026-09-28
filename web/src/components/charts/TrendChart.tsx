@@ -43,7 +43,12 @@ export function TrendChart({ points, hourly, className }: TrendChartProps) {
 
   if (points.length === 0) {
     return (
-      <div className={cn('flex h-48 items-center justify-center text-xs text-muted-foreground', className)}>
+      <div
+        className={cn(
+          'flex h-48 items-center justify-center text-xs text-muted-foreground',
+          className,
+        )}
+      >
         暂无趋势数据
       </div>
     );
@@ -96,7 +101,12 @@ export function TrendChart({ points, hourly, className }: TrendChartProps) {
                 strokeDasharray="3 3"
                 strokeWidth="1"
               />
-              <text x={PAD.left - 6} y={y + 3} textAnchor="end" className="fill-muted-foreground text-[9px]">
+              <text
+                x={PAD.left - 6}
+                y={y + 3}
+                textAnchor="end"
+                className="fill-muted-foreground text-[9px]"
+              >
                 {formatTokens(model.maxRequests * t)}
               </text>
               <text
@@ -166,7 +176,10 @@ export function TrendChart({ points, hourly, className }: TrendChartProps) {
           onMouseMove={(e) => {
             const rect = (e.target as SVGRectElement).getBoundingClientRect();
             const rel = ((e.clientX - rect.left) / rect.width) * innerW;
-            setHover({ index: Math.min(points.length - 1, Math.max(0, Math.floor(rel / step))), x: rel });
+            setHover({
+              index: Math.min(points.length - 1, Math.max(0, Math.floor(rel / step))),
+              x: rel,
+            });
           }}
         />
         {hover && (
@@ -181,13 +194,13 @@ export function TrendChart({ points, hourly, className }: TrendChartProps) {
         )}
       </svg>
 
-      {hovered && (
+      {hovered && hover && (
         <div
           className="pointer-events-none absolute top-2 z-10 min-w-40 rounded-md border bg-popover p-2 text-xs shadow-md"
           style={{
-            left: `${((hover!.index + 0.5) * step + PAD.left) / width * 100}%`,
+            left: `${(((hover.index + 0.5) * step + PAD.left) / width) * 100}%`,
             transform:
-              hover!.index > points.length / 2 ? 'translateX(calc(-100% - 8px))' : 'translateX(8px)',
+              hover.index > points.length / 2 ? 'translateX(calc(-100% - 8px))' : 'translateX(8px)',
           }}
         >
           <div className="font-medium">{formatBucket(hovered.bucket, hourly)}</div>

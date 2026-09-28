@@ -1,13 +1,7 @@
 import { useState } from 'react';
 import { KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 
 interface AuthDialogProps {
@@ -32,7 +26,9 @@ export function AuthDialog({ onSubmit, error }: AuthDialogProps) {
           </div>
           <CardTitle>需要管理密钥</CardTitle>
           <CardDescription>
-            {'未能自动读取管理密钥（cpa-dashboard 未保存密钥、管理中心未勾选「记住密码」，或面板与 CLIProxyAPI 跨源部署）。请输入管理密钥后重试。'}
+            {
+              '未能自动读取管理密钥（cpa-dashboard 未保存密钥、管理中心未勾选「记住密码」，或面板与 CLIProxyAPI 跨源部署）。请输入管理密钥后重试。'
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -59,7 +55,9 @@ export function AuthDialog({ onSubmit, error }: AuthDialogProps) {
             {'密钥仅保存在浏览器 localStorage，用于调用本插件的管理接口。'}
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
-            {'管理密钥连续输错 5 次会被 CLIProxyAPI 判定为认证失败并临时封禁该 IP 约 30 分钟，请确认密钥无误后再连接。'}
+            {
+              '管理密钥连续输错 5 次会被 CLIProxyAPI 判定为认证失败并临时封禁该 IP 约 30 分钟，请确认密钥无误后再连接。'
+            }
           </p>
         </CardContent>
       </Card>

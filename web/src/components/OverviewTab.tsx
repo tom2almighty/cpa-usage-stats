@@ -1,4 +1,4 @@
-import * as React from 'react';
+import type * as React from 'react';
 import {
   Activity,
   AlertCircle,
@@ -69,8 +69,10 @@ export function OverviewTab({ summary, loading }: OverviewTabProps) {
                 {formatPercent(summary?.success_rate ?? 100)}
               </span>
               <span>成功率</span>
-              {(summary?.failed_requests ?? 0) > 0 && (
-                <span className="ml-1 text-rose-500">({formatNumber(summary!.failed_requests)} 失败)</span>
+              {summary && summary.failed_requests > 0 && (
+                <span className="ml-1 text-rose-500">
+                  ({formatNumber(summary.failed_requests)} 失败)
+                </span>
               )}
             </>
           }
@@ -86,7 +88,11 @@ export function OverviewTab({ summary, loading }: OverviewTabProps) {
           title="输入 / 输出 Tokens"
           icon={<Layers className="h-4 w-4" />}
           accent="text-blue-500"
-          value={loading ? '…' : `${formatTokens(summary?.input_tokens ?? 0)} / ${formatTokens(summary?.output_tokens ?? 0)}`}
+          value={
+            loading
+              ? '…'
+              : `${formatTokens(summary?.input_tokens ?? 0)} / ${formatTokens(summary?.output_tokens ?? 0)}`
+          }
           sub={
             <>
               <span>思考 {formatTokens(summary?.reasoning_tokens ?? 0)}</span>
@@ -163,7 +169,10 @@ export function OverviewTab({ summary, loading }: OverviewTabProps) {
               <tbody className="divide-y">
                 {models.length > 0 ? (
                   models.slice(0, 12).map((m, idx) => (
-                    <tr key={`${m.name}-${m.secondary}-${idx}`} className="transition-colors hover:bg-muted/30">
+                    <tr
+                      key={`${m.name}-${m.secondary}-${idx}`}
+                      className="transition-colors hover:bg-muted/30"
+                    >
                       <td className="p-3 font-medium">
                         <div className="flex items-center gap-1.5">
                           <span className="w-4 text-[10px] text-muted-foreground">{idx + 1}</span>
@@ -182,7 +191,9 @@ export function OverviewTab({ summary, loading }: OverviewTabProps) {
                       <td className="p-3 text-right font-medium">
                         {formatNumber(m.requests)}
                         {m.failed > 0 && (
-                          <span className="ml-1 text-[10px] text-rose-500">({formatNumber(m.failed)} 失败)</span>
+                          <span className="ml-1 text-[10px] text-rose-500">
+                            ({formatNumber(m.failed)} 失败)
+                          </span>
                         )}
                       </td>
                       <td className="p-3 text-right font-mono">
@@ -196,12 +207,16 @@ export function OverviewTab({ summary, loading }: OverviewTabProps) {
                         {formatTokens(m.reasoning_tokens)} / {formatTokens(m.cache_read_tokens)} /{' '}
                         {formatTokens(m.cache_creation_tokens)}
                       </td>
-                      <td className="p-3 text-right text-muted-foreground">{formatDuration(m.avg_latency_ms)}</td>
+                      <td className="p-3 text-right text-muted-foreground">
+                        {formatDuration(m.avg_latency_ms)}
+                      </td>
                       <td className="p-3">
                         <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                           <div
                             className="h-full rounded-full bg-primary transition-all"
-                            style={{ width: `${Math.max(2, Math.round((m.total_tokens / maxModelTokens) * 100))}%` }}
+                            style={{
+                              width: `${Math.max(2, Math.round((m.total_tokens / maxModelTokens) * 100))}%`,
+                            }}
                           />
                         </div>
                       </td>
@@ -228,7 +243,9 @@ export function OverviewTab({ summary, loading }: OverviewTabProps) {
               <KeyRound className="h-4 w-4 text-muted-foreground" />
               客户端 Key 用量
             </CardTitle>
-            <span className="text-xs text-muted-foreground">共 {summary?.api_key_stats.length ?? 0} 个</span>
+            <span className="text-xs text-muted-foreground">
+              共 {summary?.api_key_stats.length ?? 0} 个
+            </span>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -247,7 +264,9 @@ export function OverviewTab({ summary, loading }: OverviewTabProps) {
                 {summary && summary.api_key_stats.length > 0 ? (
                   summary.api_key_stats.slice(0, 10).map((k, idx) => (
                     <tr key={k.name || idx} className="transition-colors hover:bg-muted/30">
-                      <td className="max-w-56 truncate p-3 font-mono font-medium">{k.name || '-'}</td>
+                      <td className="max-w-56 truncate p-3 font-mono font-medium">
+                        {k.name || '-'}
+                      </td>
                       <td className="p-3 text-right font-medium">{formatNumber(k.requests)}</td>
                       <td className="p-3 text-right">
                         {k.failed > 0 ? (
@@ -260,7 +279,9 @@ export function OverviewTab({ summary, loading }: OverviewTabProps) {
                         )}
                       </td>
                       <td className="p-3 text-right font-mono">{formatTokens(k.total_tokens)}</td>
-                      <td className="p-3 text-right text-muted-foreground">{formatDuration(k.avg_latency_ms)}</td>
+                      <td className="p-3 text-right text-muted-foreground">
+                        {formatDuration(k.avg_latency_ms)}
+                      </td>
                     </tr>
                   ))
                 ) : (

@@ -14,7 +14,8 @@ let bearer: string | null = null;
 
 /** Set the management key used on every request; null clears it. */
 export function setManagementKey(key: string | null) {
-  bearer = key && key.trim() ? key.trim() : null;
+  const trimmed = key?.trim();
+  bearer = trimmed ? trimmed : null;
 }
 
 export function hasManagementKey(): boolean {
@@ -29,9 +30,12 @@ async function request<T>(path: string, params: Record<string, string>): Promise
   const query = new URLSearchParams(
     Object.entries(params).filter(([, v]) => v !== '' && v !== undefined),
   );
-  const res = await fetch(`${resolveApiBase()}${API_BASE}${path}${query.toString() ? `?${query}` : ''}`, {
-    headers: { Authorization: `Bearer ${bearer}` },
-  });
+  const res = await fetch(
+    `${resolveApiBase()}${API_BASE}${path}${query.toString() ? `?${query}` : ''}`,
+    {
+      headers: { Authorization: `Bearer ${bearer}` },
+    },
+  );
   if (res.status === 401) {
     throw new UnauthorizedError();
   }

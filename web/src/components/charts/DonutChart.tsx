@@ -39,7 +39,12 @@ export function DonutChart({ stats, metric, className }: DonutChartProps) {
 
   if (slices.length === 0) {
     return (
-      <div className={cn('flex h-40 items-center justify-center text-xs text-muted-foreground', className)}>
+      <div
+        className={cn(
+          'flex h-40 items-center justify-center text-xs text-muted-foreground',
+          className,
+        )}
+      >
         暂无数据
       </div>
     );
@@ -56,7 +61,13 @@ export function DonutChart({ stats, metric, className }: DonutChartProps) {
   return (
     <div className={cn('flex items-center gap-4', className)}>
       <div className="relative shrink-0">
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="分布环形图">
+        <svg
+          width={size}
+          height={size}
+          viewBox={`0 0 ${size} ${size}`}
+          role="img"
+          aria-label="分布环形图"
+        >
           <circle cx={c} cy={c} r={r} fill="none" className="stroke-muted" strokeWidth={stroke} />
           {slices.map((slice, i) => {
             const dash = slice.frac * circumference;
@@ -84,9 +95,14 @@ export function DonutChart({ stats, metric, className }: DonutChartProps) {
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
           {hover ? (
             <>
-              <div className="max-w-20 truncate text-xs font-semibold">{hover.stat.name || '-'}</div>
+              <div className="max-w-20 truncate text-xs font-semibold">
+                {hover.stat.name || '-'}
+              </div>
               <div className="text-[10px] text-muted-foreground">
-                {(hover.frac * 100).toFixed(1)}% · {metric === 'total_tokens' ? formatTokens(hover.stat.total_tokens) : formatNumber(hover.stat.requests)}
+                {(hover.frac * 100).toFixed(1)}% ·{' '}
+                {metric === 'total_tokens'
+                  ? formatTokens(hover.stat.total_tokens)
+                  : formatNumber(hover.stat.requests)}
               </div>
             </>
           ) : (

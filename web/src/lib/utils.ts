@@ -45,4 +45,3 @@ export function formatBucket(bucket: string, hourly: boolean): string {
   if (hourly) return `${bucket.slice(11, 13)}:00`;
   return bucket.slice(5, 10);
 }
-

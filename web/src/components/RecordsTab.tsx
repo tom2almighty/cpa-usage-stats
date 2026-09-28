@@ -1,5 +1,13 @@
 import * as React from 'react';
-import { AlertCircle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Layers, Search } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Layers,
+  Search,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -161,7 +169,9 @@ export function RecordsTab({
                         className="cursor-pointer transition-colors hover:bg-muted/30 focus:bg-muted/40 focus:outline-none"
                       >
                         <td className="p-3 text-muted-foreground">
-                          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                          <ChevronDown
+                            className={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                          />
                         </td>
                         <td className="whitespace-nowrap p-3 font-mono text-[11px] text-muted-foreground">
                           {formatDateTime(r.requested_at)}
@@ -182,11 +192,19 @@ export function RecordsTab({
                         <td className="p-3 font-medium">
                           <div className="flex flex-col">
                             <span className="max-w-44 truncate">{r.model}</span>
-                            {(r.alias && r.alias !== r.model) || (r.response_model && r.response_model !== r.model) ? (
+                            {(r.alias && r.alias !== r.model) ||
+                            (r.response_model && r.response_model !== r.model) ? (
                               <span className="max-w-44 truncate text-[10px] text-muted-foreground">
                                 {r.alias && r.alias !== r.model ? `别名 ${r.alias}` : ''}
-                                {r.alias && r.alias !== r.model && r.response_model && r.response_model !== r.model ? ' · ' : ''}
-                                {r.response_model && r.response_model !== r.model ? `上游 ${r.response_model}` : ''}
+                                {r.alias &&
+                                r.alias !== r.model &&
+                                r.response_model &&
+                                r.response_model !== r.model
+                                  ? ' · '
+                                  : ''}
+                                {r.response_model && r.response_model !== r.model
+                                  ? `上游 ${r.response_model}`
+                                  : ''}
                               </span>
                             ) : null}
                           </div>
@@ -197,19 +215,27 @@ export function RecordsTab({
                           </Badge>
                         </td>
                         <td className="p-3 text-right font-mono">
-                          <span className="text-muted-foreground">{formatTokens(r.input_tokens)}</span> /{' '}
-                          <span className="text-muted-foreground">{formatTokens(r.output_tokens)}</span> /{' '}
-                          <span className="font-semibold">{formatTokens(r.total_tokens)}</span>
+                          <span className="text-muted-foreground">
+                            {formatTokens(r.input_tokens)}
+                          </span>{' '}
+                          /{' '}
+                          <span className="text-muted-foreground">
+                            {formatTokens(r.output_tokens)}
+                          </span>{' '}
+                          / <span className="font-semibold">{formatTokens(r.total_tokens)}</span>
                           {(r.cache_read_tokens > 0 || r.cache_creation_tokens > 0) && (
                             <div className="text-[10px] text-muted-foreground">
-                              缓存 读{formatTokens(r.cache_read_tokens)} / 写{formatTokens(r.cache_creation_tokens)}
+                              缓存 读{formatTokens(r.cache_read_tokens)} / 写
+                              {formatTokens(r.cache_creation_tokens)}
                             </div>
                           )}
                         </td>
                         <td className="whitespace-nowrap p-3 text-right font-mono">
                           <div>{formatDuration(r.latency_ms)}</div>
                           {r.stream && r.ttft_ms > 0 && (
-                            <div className="text-[10px] text-muted-foreground">TTFT: {formatDuration(r.ttft_ms)}</div>
+                            <div className="text-[10px] text-muted-foreground">
+                              TTFT: {formatDuration(r.ttft_ms)}
+                            </div>
                           )}
                         </td>
                         <td className="max-w-32 truncate p-3 font-mono text-[11px] text-muted-foreground">
@@ -225,7 +251,11 @@ export function RecordsTab({
                               <Detail label="Trace ID">{r.trace_id}</Detail>
                               <Detail label="Session ID">{r.session_id}</Detail>
                               <Detail label="来源 (Source)">{r.source}</Detail>
-                              <Detail label="认证 (Auth)">{[r.auth_id, r.auth_index && `#${r.auth_index}`, r.auth_type].filter(Boolean).join(' · ')}</Detail>
+                              <Detail label="认证 (Auth)">
+                                {[r.auth_id, r.auth_index && `#${r.auth_index}`, r.auth_type]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </Detail>
                               <Detail label="上游 Base URL">{r.base_url}</Detail>
                               <Detail label="推理力度 (Reasoning)">{r.reasoning_effort}</Detail>
                               <Detail label="Service Tier（请求 → 响应）">
@@ -234,18 +264,26 @@ export function RecordsTab({
                                   : ''}
                               </Detail>
                               <Detail label="流式 / 生成">
-                                {[r.stream ? '流式' : '非流式', r.generate ? '生成' : '非生成'].join(' · ')}
+                                {[
+                                  r.stream ? '流式' : '非流式',
+                                  r.generate ? '生成' : '非生成',
+                                ].join(' · ')}
                               </Detail>
                               <Detail label="Tokens 明细">
-                                入 {formatNumber(r.input_tokens)} · 出 {formatNumber(r.output_tokens)} · 思考{' '}
-                                {formatNumber(r.reasoning_tokens)} · 缓存读 {formatNumber(r.cache_read_tokens)} · 缓存写{' '}
-                                {formatNumber(r.cache_creation_tokens)} · 总 {formatNumber(r.total_tokens)}
+                                入 {formatNumber(r.input_tokens)} · 出{' '}
+                                {formatNumber(r.output_tokens)} · 思考{' '}
+                                {formatNumber(r.reasoning_tokens)} · 缓存读{' '}
+                                {formatNumber(r.cache_read_tokens)} · 缓存写{' '}
+                                {formatNumber(r.cache_creation_tokens)} · 总{' '}
+                                {formatNumber(r.total_tokens)}
                               </Detail>
                             </div>
 
                             {r.failure_body && (
                               <div className="mt-2 break-all rounded border border-rose-500/20 bg-rose-500/10 p-2.5 font-mono text-xs text-rose-700 dark:text-rose-300">
-                                <div className="mb-1 text-[11px] font-semibold">失败响应错误详情:</div>
+                                <div className="mb-1 text-[11px] font-semibold">
+                                  失败响应错误详情:
+                                </div>
                                 <div>{r.failure_body}</div>
                               </div>
                             )}
@@ -272,11 +310,23 @@ export function RecordsTab({
               第 {page} 页 / 共 {totalPages} 页 · 每页 {pageSize} 条
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="h-8 gap-1" onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page <= 1}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1"
+                onClick={() => onPageChange(Math.max(1, page - 1))}
+                disabled={page <= 1}
+              >
                 <ChevronLeft className="h-3.5 w-3.5" />
                 <span>上一页</span>
               </Button>
-              <Button variant="outline" size="sm" className="h-8 gap-1" onClick={() => onPageChange(page + 1)} disabled={page >= totalPages}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1"
+                onClick={() => onPageChange(page + 1)}
+                disabled={page >= totalPages}
+              >
                 <span>下一页</span>
                 <ChevronRight className="h-3.5 w-3.5" />
               </Button>

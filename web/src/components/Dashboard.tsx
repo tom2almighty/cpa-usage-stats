@@ -5,14 +5,33 @@ import { OverviewTab } from '@/components/OverviewTab';
 import { RecordsTab } from '@/components/RecordsTab';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
-import { fetchOptions, fetchRecords, fetchSummary, setManagementKey, UnauthorizedError } from '@/lib/api';
+import {
+  fetchOptions,
+  fetchRecords,
+  fetchSummary,
+  setManagementKey,
+  UnauthorizedError,
+} from '@/lib/api';
 import { clearOwnKey, resolveManagementKey, storeOwnKey } from '@/lib/auth';
 import { cn } from '@/lib/utils';
-import type { OptionsResponse, RecordListResponse, RecordsFilters, SummaryData, TabKey, TimeRange } from '@/types';
+import type {
+  OptionsResponse,
+  RecordListResponse,
+  RecordsFilters,
+  SummaryData,
+  TabKey,
+  TimeRange,
+} from '@/types';
 
 const PAGE_SIZE = 15;
 
-const EMPTY_FILTERS: RecordsFilters = { model: '', provider: '', apiKey: '', status: 'all', keyword: '' };
+const EMPTY_FILTERS: RecordsFilters = {
+  model: '',
+  provider: '',
+  apiKey: '',
+  status: 'all',
+  keyword: '',
+};
 
 const RANGE_OPTIONS: { label: string; value: TimeRange }[] = [
   { label: '今日', value: 'today' },
@@ -39,7 +58,11 @@ export function Dashboard() {
 
   const [summary, setSummary] = React.useState<SummaryData | null>(null);
   const [records, setRecords] = React.useState<RecordListResponse | null>(null);
-  const [options, setOptions] = React.useState<OptionsResponse>({ models: [], providers: [], api_keys: [] });
+  const [options, setOptions] = React.useState<OptionsResponse>({
+    models: [],
+    providers: [],
+    api_keys: [],
+  });
 
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -81,7 +104,8 @@ export function Dashboard() {
     try {
       // 先用 options 探测密钥：密钥错误时只消耗 1 次认证失败计数（CPA 连续 5 次失败封禁 IP 30 分钟）
       setOptions(await fetchOptions());
-      const failed = filters.status === 'all' ? undefined : filters.status === 'failed' ? 'true' : 'false';
+      const failed =
+        filters.status === 'all' ? undefined : filters.status === 'failed' ? 'true' : 'false';
       const shared = {
         range,
         model: filters.model,
@@ -90,7 +114,10 @@ export function Dashboard() {
         failed,
         keyword: filters.keyword,
       };
-      const [summaryRes, recordsRes] = await Promise.all([fetchSummary(shared), fetchRecords(shared, page, PAGE_SIZE)]);
+      const [summaryRes, recordsRes] = await Promise.all([
+        fetchSummary(shared),
+        fetchRecords(shared, page, PAGE_SIZE),
+      ]);
       setSummary(summaryRes);
       setRecords(recordsRes);
     } catch (e) {
@@ -197,12 +224,24 @@ export function Dashboard() {
             ))}
           </Select>
 
-          <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => void load()} disabled={refreshing}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5"
+            onClick={() => void load()}
+            disabled={refreshing}
+          >
             <RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />
             <span>刷新</span>
           </Button>
 
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleAuthReset} title="重置管理密钥">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={handleAuthReset}
+            title="重置管理密钥"
+          >
             <span className="text-xs font-medium">密钥</span>
           </Button>
 
@@ -232,7 +271,9 @@ export function Dashboard() {
             onClick={() => setTab(t.key)}
             className={cn(
               'flex-1 rounded-md px-4 py-1.5 text-sm font-medium transition-colors sm:flex-none',
-              tab === t.key ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+              tab === t.key
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
             )}
           >
             {t.label}

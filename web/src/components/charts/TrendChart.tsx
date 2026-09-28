@@ -82,8 +82,8 @@ export function TrendChart({ points, hourly, className }: TrendChartProps) {
       >
         <defs>
           <linearGradient id={`tokFill${uid}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="hsl(221 83% 53%)" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="hsl(221 83% 53%)" stopOpacity="0.02" />
+            <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity="0.02" />
           </linearGradient>
         </defs>
 
@@ -132,7 +132,7 @@ export function TrendChart({ points, hourly, className }: TrendChartProps) {
               width={barW}
               height={Math.max(0, PAD.top + innerH - y)}
               rx={1.5}
-              className="fill-emerald-500/70"
+              className="fill-chart-1/70"
               opacity={hover && hover.index !== i ? 0.45 : 1}
             />
           );
@@ -140,14 +140,14 @@ export function TrendChart({ points, hourly, className }: TrendChartProps) {
 
         {/* Token area + line */}
         <path d={areaPath} fill={`url(#tokFill${uid})`} />
-        <path d={linePath} fill="none" className="stroke-blue-500" strokeWidth="1.8" />
+        <path d={linePath} fill="none" className="stroke-chart-2" strokeWidth="1.8" />
         {points.map((p, i) => (
           <circle
             key={`dot-${p.bucket}`}
             cx={x(i)}
             cy={yTok(p.tokens)}
             r={hover?.index === i ? 3.2 : 0}
-            className="fill-blue-500"
+            className="fill-chart-2"
           />
         ))}
 
@@ -207,14 +207,14 @@ export function TrendChart({ points, hourly, className }: TrendChartProps) {
           <div className="mt-1 space-y-0.5 text-muted-foreground">
             <div className="flex justify-between gap-4">
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                <span className="h-1.5 w-1.5 rounded-full bg-chart-1" />
                 请求
               </span>
               <span className="font-mono text-foreground">{formatNumber(hovered.requests)}</span>
             </div>
             <div className="flex justify-between gap-4">
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                <span className="h-1.5 w-1.5 rounded-full bg-chart-2" />
                 Tokens
               </span>
               <span className="font-mono text-foreground">{formatTokens(hovered.tokens)}</span>
@@ -226,7 +226,7 @@ export function TrendChart({ points, hourly, className }: TrendChartProps) {
               </span>
             </div>
             {hovered.failed > 0 && (
-              <div className="flex justify-between gap-4 text-rose-500">
+              <div className="flex justify-between gap-4 text-destructive">
                 <span>失败</span>
                 <span className="font-mono">{formatNumber(hovered.failed)}</span>
               </div>
@@ -237,11 +237,11 @@ export function TrendChart({ points, hourly, className }: TrendChartProps) {
 
       <div className="mt-2 flex items-center justify-center gap-4 text-[10px] text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-sm bg-emerald-500/70" />
+          <span className="h-2 w-2 rounded-sm bg-chart-1/70" />
           请求数（左轴）
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-0.5 w-4 rounded bg-blue-500" />
+          <span className="h-0.5 w-4 rounded bg-chart-2" />
           Tokens（右轴）
         </span>
       </div>

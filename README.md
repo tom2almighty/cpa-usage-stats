@@ -105,11 +105,20 @@ http://127.0.0.1:8317/v0/resource/plugins/cpa-usage-stats/dashboard
 
 ### 5. 看板功能
 
-- **用量总览**：请求量 / 成功率、Token 总量、输入输出与缓存读写分列、平均延迟 / TTFT 四组指标卡；按小时（今日 / 昨天）或按天（7 天 / 30 天 / 全部）的双轴趋势图（请求数 + Tokens）；Provider 分布环形图；模型用量排行（含失败数与 Token 占比）；客户端 Key 用量表。
-- **调用明细**：关键词（Key / 模型 / Request / Trace / Session / 错误信息）与模型、Provider、Key、状态多维筛选，分页浏览；展开单条记录查看 Request ID、Trace ID、Session ID、认证信息、上游 Base URL、推理力度、Service Tier（请求 → 响应）、流式 / 生成标记、完整 Token 分解与失败响应详情。
+- **用量总览**：请求量 / 成功率、Token 总量、输入输出与缓存读写分列、平均延迟 / TTFT、**预估成本**五组指标卡；按小时（今日 / 昨天）或按天（7 天 / 30 天 / 全部）的双轴趋势图（请求数 + Tokens）；Provider 分布环形图；模型用量排行（含失败数、Token 占比、**单价与预估成本**）；客户端 Key 用量表。
+- **调用明细**：关键词（Key / 模型 / Request / Trace / Session / 错误信息）与模型、Provider、Key、状态多维筛选，分页浏览；展开单条记录查看 Request ID、Trace ID、Session ID、认证信息、上游 Base URL、推理力度、Service Tier（请求 → 响应）、流式 / 生成标记、完整 Token 分解、**匹配到的模型价格与单条预估成本**、失败响应详情。
 - 时间范围切换、自动刷新（10s / 30s / 60s）、深浅主题。
 
-### 6. 管理 API
+### 6. 模型价格与成本估算
+
+成本数据来自 [models.dev](https://github.com/anomalyco/models.dev)（USD / 每 100 万 tokens）：
+
+- 看板首次打开时拉取一次 `https://models.dev/api.json`（约 5 MB），只保留「模型 id → 渠道 → 价格」的索引（约 0.5 MB）存入浏览器 `localStorage`，**24 小时内复用缓存**；网络失败时继续用过期缓存兜底，也可点「刷新价格」手动更新。
+- 模型匹配顺序：`response_model` → `model` → `alias`，先精确匹配，再去掉渠道前缀、日期后缀（如 `-20250929`）、`-latest` / `-preview` 等后缀回退匹配；同一模型在多个渠道有价格时，优先取与记录 provider 对应的渠道（`claude`→`anthropic`、`codex`→`openai`、`gemini`/`vertex`→`google` 等）。
+- 计费口径按 CPA 的 token 语义折算：缓存读 / 写按缓存价（缺失时按输入价），OpenAI 系（缓存计入输入）先从输入里扣除缓存 token，Claude 系（缓存独立计数）直接相加，Gemini 系（思考独立于输出）思考按输出价计费。
+- 展示的是**标准价估算**：不含上下文阶梯价、批量折扣、渠道加价与免费额度；未匹配到价格的模型显示「未匹配」，不计入成本。
+
+### 7. 管理 API
 
 插件在 `/v0/management/plugins/cpa-usage-stats` 下注册三个只读接口（宿主管理密钥鉴权）：
 

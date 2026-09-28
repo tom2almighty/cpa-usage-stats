@@ -45,3 +45,22 @@ export function formatBucket(bucket: string, hourly: boolean): string {
   if (hourly) return `${bucket.slice(11, 13)}:00`;
   return bucket.slice(5, 10);
 }
+
+/** USD amount, keeping enough decimals for sub-cent estimates. */
+export function formatCost(usd: number): string {
+  if (!Number.isFinite(usd)) return '-';
+  if (usd === 0) return '$0';
+  const abs = Math.abs(usd);
+  if (abs < 0.01) return `$${usd.toFixed(4)}`;
+  if (abs < 1) return `$${usd.toFixed(3)}`;
+  if (abs < 1000) return `$${usd.toFixed(2)}`;
+  return `$${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(usd)}`;
+}
+
+/** Unit price per 1M tokens, e.g. "$3" / "$0.30". */
+export function formatUnitPrice(value: number): string {
+  if (!Number.isFinite(value)) return '-';
+  if (value === 0) return '$0';
+  if (value < 1) return `$${value.toFixed(2).replace(/0$/, '')}`;
+  return `$${Number.isInteger(value) ? value : value.toFixed(2)}`;
+}

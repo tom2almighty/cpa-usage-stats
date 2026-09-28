@@ -13,7 +13,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { formatDateTime, formatDuration, formatNumber, formatTokens } from '@/lib/utils';
+import {
+  formatCost,
+  formatDateTime,
+  formatDuration,
+  formatNumber,
+  formatTokens,
+  formatUnitPrice,
+} from '@/lib/utils';
+import { recordCost, type PricingState } from '@/lib/pricing';
 import type { OptionsResponse, RecordListResponse, RecordsFilters } from '@/types';
 
 interface RecordsTabProps {
@@ -25,6 +33,7 @@ interface RecordsTabProps {
   page: number;
   onPageChange: (page: number) => void;
   pageSize: number;
+  pricing: PricingState;
 }
 
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
@@ -45,6 +54,7 @@ export function RecordsTab({
   page,
   onPageChange,
   pageSize,
+  pricing,
 }: RecordsTabProps) {
   const [expandedId, setExpandedId] = React.useState<number | null>(null);
   // Keyword is kept local and debounced so typing does not fire a query per key.
@@ -147,6 +157,7 @@ export function RecordsTab({
                 <th className="p-3">模型</th>
                 <th className="p-3">Provider</th>
                 <th className="p-3 text-right">Tokens（入/出/总）</th>
+                <th className="p-3 text-right">预估成本</th>
                 <th className="p-3 text-right">耗时 / TTFT</th>
                 <th className="p-3">Key / 认证</th>
               </tr>
@@ -155,6 +166,7 @@ export function RecordsTab({
               {items.length > 0 ? (
                 items.map((r) => {
                   const isExpanded = expandedId === r.id;
+                  const cost = recordCost(pricing.table, r);
                   return (
                     <React.Fragment key={r.id}>
                       <tr
@@ -183,9 +195,9 @@ export function RecordsTab({
                               <span>{r.status_code || 500}</span>
                             </Badge>
                           ) : (
-                            <Badge variant="success" className="gap-1 px-1.5 py-0 text-[10px]">
-                              <CheckCircle2 className="h-3 w-3" />
-                              <span>200</span>
+                            <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-[10px]">
+                              <CheckCircle2 className="h-3 w-3 text-muted-foreground" />
+                              <span>{r.status_code || 200}</span>
                             </Badge>
                           )}
                         </td>
@@ -231,6 +243,22 @@ export function RecordsTab({
                           )}
                         </td>
                         <td className="whitespace-nowrap p-3 text-right font-mono">
+                          {cost ? (
+                            <>
+                              <div>{formatCost(cost.cost)}</div>
+                              <div
+                                className="text-[10px] text-muted-foreground"
+                                title={`models.dev: ${cost.match.providerId}/${cost.match.modelId}`}
+                              >
+                                {formatUnitPrice(cost.match.price.input)} /{' '}
+                                {formatUnitPrice(cost.match.price.output)}
+                              </div>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap p-3 text-right font-mono">
                           <div>{formatDuration(r.latency_ms)}</div>
                           {r.stream && r.ttft_ms > 0 && (
                             <div className="text-[10px] text-muted-foreground">
@@ -245,7 +273,7 @@ export function RecordsTab({
 
                       {isExpanded && (
                         <tr className="bg-muted/20">
-                          <td colSpan={8} className="space-y-3 border-b border-t p-4">
+                          <td colSpan={9} className="space-y-3 border-b border-t p-4">
                             <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3 lg:grid-cols-4">
                               <Detail label="Request ID">{r.request_id}</Detail>
                               <Detail label="Trace ID">{r.trace_id}</Detail>
@@ -277,10 +305,24 @@ export function RecordsTab({
                                 {formatNumber(r.cache_creation_tokens)} · 总{' '}
                                 {formatNumber(r.total_tokens)}
                               </Detail>
+                              <Detail label="模型价格（models.dev）">
+                                {cost
+                                  ? `${cost.match.providerId}/${cost.match.modelId} · 入 ${formatUnitPrice(cost.match.price.input)} · 出 ${formatUnitPrice(cost.match.price.output)}${
+                                      cost.match.price.cacheRead !== undefined
+                                        ? ` · 缓存读 ${formatUnitPrice(cost.match.price.cacheRead)}`
+                                        : ''
+                                    }${
+                                      cost.match.price.cacheWrite !== undefined
+                                        ? ` · 缓存写 ${formatUnitPrice(cost.match.price.cacheWrite)}`
+                                        : ''
+                                    }`
+                                  : '未匹配到价格'}
+                              </Detail>
+                              <Detail label="预估成本">{cost ? formatCost(cost.cost) : '-'}</Detail>
                             </div>
 
                             {r.failure_body && (
-                              <div className="mt-2 break-all rounded border border-rose-500/20 bg-rose-500/10 p-2.5 font-mono text-xs text-rose-700 dark:text-rose-300">
+                              <div className="mt-2 break-all rounded-md border border-destructive/30 bg-destructive/10 p-2.5 font-mono text-xs text-destructive">
                                 <div className="mb-1 text-[11px] font-semibold">
                                   失败响应错误详情:
                                 </div>
@@ -295,7 +337,7 @@ export function RecordsTab({
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-muted-foreground">
+                  <td colSpan={9} className="p-8 text-center text-muted-foreground">
                     {loading ? '加载中...' : '无匹配记录'}
                   </td>
                 </tr>

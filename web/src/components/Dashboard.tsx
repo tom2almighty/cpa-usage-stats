@@ -1,7 +1,8 @@
 import * as React from 'react';
-import { BarChart3, Moon, RefreshCw, Sun } from 'lucide-react';
+import { ChartColumn, Moon, RefreshCw, Sun } from 'lucide-react';
 import { AuthDialog } from '@/components/AuthDialog';
 import { OverviewTab } from '@/components/OverviewTab';
+import { PricingSource } from '@/components/PricingSource';
 import { RecordsTab } from '@/components/RecordsTab';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
@@ -13,6 +14,7 @@ import {
   UnauthorizedError,
 } from '@/lib/api';
 import { clearOwnKey, resolveManagementKey, storeOwnKey } from '@/lib/auth';
+import { usePricing } from '@/lib/pricing';
 import { cn } from '@/lib/utils';
 import type {
   OptionsResponse,
@@ -74,6 +76,9 @@ export function Dashboard() {
   const [keyChecked, setKeyChecked] = React.useState(false);
 
   const [autoRefresh, setAutoRefresh] = React.useState('0');
+
+  // models.dev prices: fetched once per day and cached in localStorage.
+  const pricing = usePricing();
 
   const [darkMode, setDarkMode] = React.useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -176,14 +181,14 @@ export function Dashboard() {
     <div className="mx-auto max-w-7xl space-y-5 p-4 md:p-8">
       {/* Header */}
       <div className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="rounded-lg bg-primary/10 p-2 text-primary">
-            <BarChart3 className="h-6 w-6" />
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
+            <ChartColumn className="h-5 w-5" />
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight md:text-2xl">CLIProxyAPI 用量统计</h1>
             <p className="text-xs text-muted-foreground md:text-sm">
-              v8 用量观察能力 · SQLite 持久化 · 请求 / Token / 延迟多维看板
+              v8 用量观察能力 · SQLite 持久化 · 请求 / Token / 成本多维看板
             </p>
           </div>
         </div>
@@ -252,7 +257,7 @@ export function Dashboard() {
             className="h-8 w-8"
             title="切换深浅主题"
           >
-            {darkMode ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4" />}
+            {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
         </div>
       </div>
@@ -287,8 +292,10 @@ export function Dashboard() {
         </div>
       )}
 
+      <PricingSource pricing={pricing} />
+
       {tab === 'overview' ? (
-        <OverviewTab summary={summary} loading={loading} />
+        <OverviewTab summary={summary} loading={loading} pricing={pricing} />
       ) : (
         <RecordsTab
           data={records}
@@ -302,6 +309,7 @@ export function Dashboard() {
           page={page}
           onPageChange={setPage}
           pageSize={PAGE_SIZE}
+          pricing={pricing}
         />
       )}
     </div>

@@ -9,16 +9,11 @@ interface DonutChartProps {
   className?: string;
 }
 
-const PALETTE = [
-  'hsl(221 83% 53%)',
-  'hsl(160 84% 39%)',
-  'hsl(38 92% 50%)',
-  'hsl(280 65% 60%)',
-  'hsl(0 72% 51%)',
-  'hsl(199 89% 48%)',
-  'hsl(330 70% 55%)',
-  'hsl(88 60% 45%)',
-];
+/** shadcn chart palette; slices beyond the five tokens reuse them with lower opacity. */
+function sliceColor(index: number): string {
+  const token = `--chart-${(index % 5) + 1}`;
+  return index < 5 ? `hsl(var(${token}))` : `hsl(var(${token}) / 0.55)`;
+}
 
 /** SVG donut for provider / API-key distribution with hover highlighting. */
 export function DonutChart({ stats, metric, className }: DonutChartProps) {
@@ -29,11 +24,11 @@ export function DonutChart({ stats, metric, className }: DonutChartProps) {
     const total = usable.reduce((sum, s) => sum + s[metric], 0);
     if (total <= 0) return [];
     let acc = 0;
-    return usable.slice(0, PALETTE.length).map((s, i) => {
+    return usable.map((s, i) => {
       const frac = s[metric] / total;
       const start = acc;
       acc += frac;
-      return { stat: s, frac, start, color: PALETTE[i % PALETTE.length] };
+      return { stat: s, frac, start, color: sliceColor(i) };
     });
   }, [stats, metric]);
 

@@ -2,7 +2,8 @@ import type * as React from 'react';
 import {
   Activity,
   AlertCircle,
-  BarChart3,
+  ChartColumn,
+  CircleDollarSign,
   Clock,
   Database,
   KeyRound,
@@ -14,12 +15,21 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { TrendChart } from '@/components/charts/TrendChart';
-import { formatDuration, formatNumber, formatPercent, formatTokens } from '@/lib/utils';
+import { groupCost, priceFor, totalCost, type PricingState } from '@/lib/pricing';
+import {
+  formatCost,
+  formatDuration,
+  formatNumber,
+  formatPercent,
+  formatTokens,
+  formatUnitPrice,
+} from '@/lib/utils';
 import type { SummaryData } from '@/types';
 
 interface OverviewTabProps {
   summary: SummaryData | null;
   loading: boolean;
+  pricing: PricingState;
 }
 
 function MetricCard({
@@ -27,19 +37,17 @@ function MetricCard({
   icon,
   value,
   sub,
-  accent,
 }: {
   title: string;
   icon: React.ReactNode;
   value: string;
   sub: React.ReactNode;
-  accent: string;
 }) {
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0 p-4 pb-2">
         <CardTitle className="text-xs font-medium text-muted-foreground">{title}</CardTitle>
-        <span className={accent}>{icon}</span>
+        <span className="text-muted-foreground">{icon}</span>
       </CardHeader>
       <CardContent className="p-4 pt-0">
         <div className="truncate text-2xl font-bold">{value}</div>
@@ -49,28 +57,28 @@ function MetricCard({
   );
 }
 
-export function OverviewTab({ summary, loading }: OverviewTabProps) {
+export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
   const models = summary?.model_stats ?? [];
   const maxModelTokens = Math.max(1, ...models.map((m) => m.total_tokens));
   const hourly = summary?.bucket === 'hour';
+  const costs = totalCost(pricing.table, models);
 
   return (
     <div className="space-y-6">
       {/* KPI cards */}
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-5">
         <MetricCard
           title="总请求数"
           icon={<Activity className="h-4 w-4" />}
-          accent="text-muted-foreground"
           value={loading ? '…' : formatNumber(summary?.total_requests ?? 0)}
           sub={
             <>
-              <span className="font-medium text-emerald-500">
+              <span className="font-medium text-foreground">
                 {formatPercent(summary?.success_rate ?? 100)}
               </span>
               <span>成功率</span>
               {summary && summary.failed_requests > 0 && (
-                <span className="ml-1 text-rose-500">
+                <span className="ml-1 text-destructive">
                   ({formatNumber(summary.failed_requests)} 失败)
                 </span>
               )}
@@ -80,14 +88,12 @@ export function OverviewTab({ summary, loading }: OverviewTabProps) {
         <MetricCard
           title="Token 总消耗"
           icon={<Zap className="h-4 w-4" />}
-          accent="text-amber-500"
           value={loading ? '…' : formatTokens(summary?.total_tokens ?? 0)}
           sub={<span className="truncate">{formatNumber(summary?.total_tokens ?? 0)} tokens</span>}
         />
         <MetricCard
           title="输入 / 输出 Tokens"
           icon={<Layers className="h-4 w-4" />}
-          accent="text-blue-500"
           value={
             loading
               ? '…'
@@ -106,9 +112,24 @@ export function OverviewTab({ summary, loading }: OverviewTabProps) {
         <MetricCard
           title="平均响应 / 首字延迟"
           icon={<Clock className="h-4 w-4" />}
-          accent="text-indigo-500"
           value={loading ? '…' : formatDuration(summary?.avg_latency_ms ?? 0)}
           sub={<span>TTFT {formatDuration(summary?.avg_ttft_ms ?? 0)}</span>}
+        />
+        <MetricCard
+          title="预估成本"
+          icon={<CircleDollarSign className="h-4 w-4" />}
+          value={loading || pricing.loading ? '…' : pricing.table ? formatCost(costs.cost) : '-'}
+          sub={
+            !pricing.table && !pricing.loading ? (
+              <span>价格数据不可用</span>
+            ) : costs.total > 0 ? (
+              <span className="truncate">
+                {costs.priced}/{costs.total} 个模型已匹配价格
+              </span>
+            ) : (
+              <span>暂无价格数据</span>
+            )
+          }
         />
       </div>
 
@@ -144,7 +165,7 @@ export function OverviewTab({ summary, loading }: OverviewTabProps) {
         <CardHeader className="border-b p-4">
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              <ChartColumn className="h-4 w-4 text-muted-foreground" />
               模型用量排行
             </CardTitle>
             <span className="text-xs text-muted-foreground">共 {models.length} 项</span>
@@ -160,6 +181,8 @@ export function OverviewTab({ summary, loading }: OverviewTabProps) {
                   <th className="p-3 text-right">请求数</th>
                   <th className="p-3 text-right">Tokens（入/出）</th>
                   <th className="p-3 text-right">思考 / 缓存读 / 缓存写</th>
+                  <th className="p-3 text-right">价格（入/出 · 每 1M）</th>
+                  <th className="p-3 text-right">预估成本</th>
                   <th className="p-3 text-right">平均延迟</th>
                   <th className="p-3" style={{ width: 120 }}>
                     占比
@@ -168,63 +191,87 @@ export function OverviewTab({ summary, loading }: OverviewTabProps) {
               </thead>
               <tbody className="divide-y">
                 {models.length > 0 ? (
-                  models.slice(0, 12).map((m, idx) => (
-                    <tr
-                      key={`${m.name}-${m.secondary}-${idx}`}
-                      className="transition-colors hover:bg-muted/30"
-                    >
-                      <td className="p-3 font-medium">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-4 text-[10px] text-muted-foreground">{idx + 1}</span>
-                          <span className="max-w-44 truncate">{m.name || '-'}</span>
-                        </div>
-                      </td>
-                      <td className="p-3 text-muted-foreground">
-                        {m.secondary ? (
-                          <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-normal">
-                            {m.secondary}
-                          </Badge>
-                        ) : (
-                          '-'
-                        )}
-                      </td>
-                      <td className="p-3 text-right font-medium">
-                        {formatNumber(m.requests)}
-                        {m.failed > 0 && (
-                          <span className="ml-1 text-[10px] text-rose-500">
-                            ({formatNumber(m.failed)} 失败)
+                  models.slice(0, 12).map((m, idx) => {
+                    const match = priceFor(pricing.table, { model: m.name, provider: m.secondary });
+                    const cost = groupCost(pricing.table, m);
+                    return (
+                      <tr
+                        key={`${m.name}-${m.secondary}-${idx}`}
+                        className="transition-colors hover:bg-muted/30"
+                      >
+                        <td className="p-3 font-medium">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-4 text-[10px] text-muted-foreground">{idx + 1}</span>
+                            <span className="max-w-44 truncate">{m.name || '-'}</span>
+                          </div>
+                        </td>
+                        <td className="p-3 text-muted-foreground">
+                          {m.secondary ? (
+                            <Badge
+                              variant="outline"
+                              className="px-1.5 py-0 text-[10px] font-normal"
+                            >
+                              {m.secondary}
+                            </Badge>
+                          ) : (
+                            '-'
+                          )}
+                        </td>
+                        <td className="p-3 text-right font-medium">
+                          {formatNumber(m.requests)}
+                          {m.failed > 0 && (
+                            <span className="ml-1 text-[10px] text-destructive">
+                              ({formatNumber(m.failed)} 失败)
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right font-mono">
+                          <span className="font-semibold">{formatTokens(m.total_tokens)}</span>
+                          <span className="text-muted-foreground">
+                            {' '}
+                            ({formatTokens(m.input_tokens)}/{formatTokens(m.output_tokens)})
                           </span>
-                        )}
-                      </td>
-                      <td className="p-3 text-right font-mono">
-                        <span className="font-semibold">{formatTokens(m.total_tokens)}</span>
-                        <span className="text-muted-foreground">
-                          {' '}
-                          ({formatTokens(m.input_tokens)}/{formatTokens(m.output_tokens)})
-                        </span>
-                      </td>
-                      <td className="p-3 text-right font-mono text-[11px] text-muted-foreground">
-                        {formatTokens(m.reasoning_tokens)} / {formatTokens(m.cache_read_tokens)} /{' '}
-                        {formatTokens(m.cache_creation_tokens)}
-                      </td>
-                      <td className="p-3 text-right text-muted-foreground">
-                        {formatDuration(m.avg_latency_ms)}
-                      </td>
-                      <td className="p-3">
-                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                          <div
-                            className="h-full rounded-full bg-primary transition-all"
-                            style={{
-                              width: `${Math.max(2, Math.round((m.total_tokens / maxModelTokens) * 100))}%`,
-                            }}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                        <td className="p-3 text-right font-mono text-[11px] text-muted-foreground">
+                          {formatTokens(m.reasoning_tokens)} / {formatTokens(m.cache_read_tokens)} /{' '}
+                          {formatTokens(m.cache_creation_tokens)}
+                        </td>
+                        <td className="whitespace-nowrap p-3 text-right font-mono text-[11px]">
+                          {match ? (
+                            <span title={`models.dev: ${match.providerId}/${match.modelId}`}>
+                              {formatUnitPrice(match.price.input)} /{' '}
+                              {formatUnitPrice(match.price.output)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">未匹配</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap p-3 text-right font-mono">
+                          {cost !== null ? (
+                            formatCost(cost)
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right text-muted-foreground">
+                          {formatDuration(m.avg_latency_ms)}
+                        </td>
+                        <td className="p-3">
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                            <div
+                              className="h-full rounded-full bg-primary transition-all"
+                              style={{
+                                width: `${Math.max(2, Math.round((m.total_tokens / maxModelTokens) * 100))}%`,
+                              }}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
-                    <td colSpan={7} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={9} className="p-6 text-center text-muted-foreground">
                       暂无统计数据
                     </td>
                   </tr>

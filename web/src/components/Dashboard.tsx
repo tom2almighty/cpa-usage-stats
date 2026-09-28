@@ -47,6 +47,8 @@ export function Dashboard() {
 
   const [needsAuth, setNeedsAuth] = React.useState(false);
   const [authError, setAuthError] = React.useState('');
+  // 密钥解析完成前不发任何请求
+  const [keyChecked, setKeyChecked] = React.useState(false);
 
   const [autoRefresh, setAutoRefresh] = React.useState('0');
 
@@ -69,15 +71,16 @@ export function Dashboard() {
   React.useEffect(() => {
     const key = resolveManagementKey();
     setManagementKey(key || null);
-    if (!key) {
-      setNeedsAuth(true);
-    }
+    setNeedsAuth(!key);
+    setKeyChecked(true);
   }, []);
 
-  const loadAll = React.useCallback(async () => {
+  const load = React.useCallback(async () => {
     setRefreshing(true);
     setLoadError('');
     try {
+      // 先用 options 探测密钥：密钥错误时只消耗 1 次认证失败计数（CPA 连续 5 次失败封禁 IP 30 分钟）
+      setOptions(await fetchOptions());
       const failed = filters.status === 'all' ? undefined : filters.status === 'failed' ? 'true' : 'false';
       const shared = {
         range,
@@ -103,31 +106,20 @@ export function Dashboard() {
     }
   }, [range, filters, page]);
 
-  const loadOptions = React.useCallback(async () => {
-    try {
-      setOptions(await fetchOptions());
-    } catch {
-      // Dropdown options are best-effort; the tabs surface real errors.
-    }
-  }, []);
-
+  // 只有在确认拿到密钥之后才请求数据；没有密钥时只显示输入框，绝不发无鉴权请求
   React.useEffect(() => {
-    void loadAll();
-  }, [loadAll]);
-
-  React.useEffect(() => {
-    void loadOptions();
-  }, [loadOptions]);
+    if (!keyChecked || needsAuth) return;
+    void load();
+  }, [keyChecked, needsAuth, load]);
 
   // Auto refresh loop.
   React.useEffect(() => {
-    if (autoRefresh === '0' || needsAuth) return;
+    if (autoRefresh === '0' || !keyChecked || needsAuth) return;
     const id = setInterval(() => {
-      void loadAll();
-      void loadOptions();
+      void load();
     }, Number(autoRefresh) * 1000);
     return () => clearInterval(id);
-  }, [autoRefresh, needsAuth, loadAll, loadOptions]);
+  }, [autoRefresh, keyChecked, needsAuth, load]);
 
   const handleAuthSubmit = (key: string) => {
     setManagementKey(key || null);
@@ -136,11 +128,10 @@ export function Dashboard() {
     } else {
       clearOwnKey();
     }
-    setNeedsAuth(false);
+    // 交给加载 effect：needsAuth 置为 false 后才会请求，错误密钥只消耗 1 次失败计数
+    setNeedsAuth(!key);
     setAuthError('');
     setLoading(true);
-    void loadAll();
-    void loadOptions();
   };
 
   const handleAuthReset = () => {
@@ -206,7 +197,7 @@ export function Dashboard() {
             ))}
           </Select>
 
-          <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => void loadAll()} disabled={refreshing}>
+          <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => void load()} disabled={refreshing}>
             <RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />
             <span>刷新</span>
           </Button>

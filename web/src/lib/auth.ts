@@ -15,6 +15,8 @@ const MC_AUTH_KEY = 'cli-proxy-auth';
 const ENC_PREFIX = 'enc::v1::';
 const SECRET_SALT = 'cli-proxy-api-webui::secure-storage';
 export const OWN_KEY_STORAGE = 'cpa-usage-stats.management-key';
+/** Management key entry used by the cpa-dashboard panel. */
+const PANEL_KEY_STORAGE = 'cpa-dashboard.management-key';
 
 function getKeyBytes(): Uint8Array {
   // Same inputs as the management center: the salt, the page host and the
@@ -75,18 +77,33 @@ export function clearOwnKey() {
 /**
  * Returns the management key to use, trying in order:
  * 1. the key saved by this dashboard,
- * 2. the management center's saved key (same-origin only).
+ * 2. the key saved by the cpa-dashboard panel (same-origin iframe),
+ * 3. the official management center's saved key (same-origin only).
  */
 export function resolveManagementKey(): string {
   const own = getStoredOwnKey();
   if (own) return own;
+
+  // cpa-dashboard 把管理密钥存在 sessionStorage(默认)或 localStorage(勾选记住)里
+  try {
+    const panelKey =
+      sessionStorage.getItem(PANEL_KEY_STORAGE) ?? localStorage.getItem(PANEL_KEY_STORAGE);
+    if (panelKey) return panelKey;
+  } catch {
+    // Storage may be unavailable (privacy mode); fall through to the next source.
+  }
+
   try {
     const raw = localStorage.getItem(MC_AUTH_KEY);
     if (!raw) return '';
     const parsed: unknown = JSON.parse(deobfuscate(raw));
-    if (parsed && typeof parsed === 'object') {
-      const key = (parsed as Record<string, unknown>).managementKey;
-      if (typeof key === 'string') return key;
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      'managementKey' in parsed &&
+      typeof parsed.managementKey === 'string'
+    ) {
+      return parsed.managementKey;
     }
   } catch {
     // Not same-origin, obfuscation format changed, or garbage — fall through.

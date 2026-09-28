@@ -93,10 +93,15 @@ http://127.0.0.1:8317/v0/resource/plugins/cpa-usage-stats/dashboard
 
 ### 4. 看板鉴权说明
 
-看板页面通过插件自己的管理接口（需要管理密钥）读取统计数据：
+看板页面通过插件自己的管理接口（需要管理密钥）读取统计数据。密钥按以下顺序解析，命中即用：
 
-- 同源部署（管理中心与 CLIProxyAPI 同一 origin，含管理中心 iframe 内嵌场景）下，页面会自动复用管理中心保存在 `localStorage` 中的管理密钥（需在管理中心勾选「记住密码」）。
-- 读取不到密钥时（未记住密码或跨源部署），页面会弹出输入框，手动输入管理密钥后即可使用；密钥仅保存在浏览器本地。
+1. 看板自己保存的密钥：在弹出的输入框中填写后写入 `localStorage`（键名 `cpa-usage-stats.management-key`）；
+2. cpa-dashboard 面板保存的密钥：`sessionStorage` / `localStorage` 的 `cpa-dashboard.management-key`（面板与资源页同源时可直接复用）；
+3. 官方管理中心保存的密钥：`localStorage` 的 `cli-proxy-auth`（需在管理中心勾选「记住密码」）。
+
+读取不到密钥时页面只显示输入框，**不会发送任何请求**；密钥错误时先发一个探测请求，失败即停并重新弹出输入框，重新输入才会再次尝试。
+
+> 注意：CLIProxyAPI 对同一客户端 IP 连续 5 次认证失败会临时封禁约 30 分钟。看板因此不在缺少密钥时发请求，也请在确认密钥无误后再点击「连接」。
 
 ### 5. 看板功能
 
@@ -114,7 +119,7 @@ http://127.0.0.1:8317/v0/resource/plugins/cpa-usage-stats/dashboard
 | `GET /records` | 调用明细分页（同上筛选 + `page`、`page_size`） |
 | `GET /options` | 筛选下拉选项（去重后的模型 / Provider / Key） |
 
-> 说明：按宿主设计，插件自定义管理路由统一挂载在 `/v0/management` 前缀下（v8 宿主不将 `/v8/management` 转发给插件），这与 v8 管理API的插件扩展规范一致。
+> 说明：按宿主设计，插件自定义管理路由统一挂载在 `/v0/management` 前缀下（v8 宿主不将 `/v8/management` 转发给插件），这与 v8 管理API的插件扩展规范一致。`/v0/management` 与 `/v8/management` 共用同一套管理密钥鉴权与失败计数（连续 5 次失败封禁 IP 约 30 分钟），所以插件既不需要、也无法改用 `/v8` 前缀。
 
 ---
 

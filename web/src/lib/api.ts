@@ -22,15 +22,15 @@ export function hasManagementKey(): boolean {
 }
 
 async function request<T>(path: string, params: Record<string, string>): Promise<T> {
+  // 没有密钥就不要发请求：CPA 会把无鉴权请求计入认证失败次数，连续 5 次会封禁该 IP 约 30 分钟
+  if (!bearer) {
+    throw new UnauthorizedError();
+  }
   const query = new URLSearchParams(
     Object.entries(params).filter(([, v]) => v !== '' && v !== undefined),
   );
-  const headers: Record<string, string> = {};
-  if (bearer) {
-    headers.Authorization = `Bearer ${bearer}`;
-  }
   const res = await fetch(`${resolveApiBase()}${API_BASE}${path}${query.toString() ? `?${query}` : ''}`, {
-    headers,
+    headers: { Authorization: `Bearer ${bearer}` },
   });
   if (res.status === 401) {
     throw new UnauthorizedError();

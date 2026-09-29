@@ -6,6 +6,7 @@ import { PricingSource } from '@/components/PricingSource';
 import { RecordsTab } from '@/components/RecordsTab';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   fetchOptions,
   fetchRecords,
@@ -262,56 +263,43 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="inline-flex w-full rounded-lg border bg-muted/40 p-1 sm:w-auto">
-        {(
-          [
-            { key: 'overview', label: '用量总览' },
-            { key: 'records', label: '调用明细' },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={cn(
-              'flex-1 rounded-md px-4 py-1.5 text-sm font-medium transition-colors sm:flex-none',
-              tab === t.key
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {/* Tabs & Pricing Source Bar */}
+      <Tabs value={tab} onValueChange={(val) => setTab(val as TabKey)}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <TabsList>
+            <TabsTrigger value="overview">用量总览</TabsTrigger>
+            <TabsTrigger value="records">调用明细</TabsTrigger>
+          </TabsList>
 
-      {loadError && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-          数据加载失败：{loadError}
+          <PricingSource pricing={pricing} />
         </div>
-      )}
 
-      <PricingSource pricing={pricing} />
+        {loadError && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+            数据加载失败：{loadError}
+          </div>
+        )}
 
-      {tab === 'overview' ? (
-        <OverviewTab summary={summary} loading={loading} pricing={pricing} />
-      ) : (
-        <RecordsTab
-          data={records}
-          loading={loading}
-          options={options}
-          filters={filters}
-          onFiltersChange={(f) => {
-            setFilters(f);
-            setPage(1);
-          }}
-          page={page}
-          onPageChange={setPage}
-          pageSize={PAGE_SIZE}
-          pricing={pricing}
-        />
-      )}
+        <TabsContent value="overview">
+          <OverviewTab summary={summary} loading={loading} pricing={pricing} />
+        </TabsContent>
+        <TabsContent value="records">
+          <RecordsTab
+            data={records}
+            loading={loading}
+            options={options}
+            filters={filters}
+            onFiltersChange={(f) => {
+              setFilters(f);
+              setPage(1);
+            }}
+            page={page}
+            onPageChange={setPage}
+            pageSize={PAGE_SIZE}
+            pricing={pricing}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

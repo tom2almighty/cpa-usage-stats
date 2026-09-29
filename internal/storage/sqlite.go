@@ -2,7 +2,9 @@ package storage
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -14,12 +16,42 @@ import (
 
 const (
 	timeLayout = "2006-01-02 15:04:05.000"
-	// schemaVersion gates table layout: 2 is the v8 plugin schema. Databases
-	// created before it are dropped and rebuilt (pre-v8 data is not migrated).
-	schemaVersion = 2
+	// schemaVersion gates table layout: 3 adds response_headers for failed records.
+	schemaVersion = 3
 	// Upstream error pages can be large HTML documents; keep enough to debug.
 	maxFailureBody = 4 << 10
+	// Response headers for failed requests; filtered and capped to avoid database bloat.
+	maxFailureHeaders = 2 << 10
 )
+func serializeFailureHeaders(failed bool, headers http.Header) string {
+	if !failed || len(headers) == 0 {
+		return ""
+	}
+	filtered := make(map[string][]string)
+	for k, vals := range headers {
+		lower := strings.ToLower(k)
+		if lower == "authorization" || lower == "proxy-authorization" || lower == "cookie" || lower == "set-cookie" {
+			continue
+		}
+		cleanVals := make([]string, 0, len(vals))
+		for _, v := range vals {
+			if len(v) > 256 {
+				v = v[:256] + "..."
+			}
+			cleanVals = append(cleanVals, v)
+		}
+		filtered[k] = cleanVals
+	}
+	if len(filtered) == 0 {
+		return ""
+	}
+	b, err := json.Marshal(filtered)
+	if err != nil || len(b) > maxFailureHeaders {
+		return ""
+	}
+	return string(b)
+}
+
 
 // Storage handles SQLite persistent storage.
 type Storage struct {
@@ -70,6 +102,18 @@ func (s *Storage) initSchema() error {
 		return nil
 	}
 
+	// Schema v2 to v3 migration: add response_headers column without dropping data
+	if version == 2 {
+		migration := fmt.Sprintf(`
+			ALTER TABLE usage_records ADD COLUMN response_headers TEXT;
+			PRAGMA user_version = %d;
+		`, schemaVersion)
+		if _, err := s.db.Exec(migration); err != nil {
+			return fmt.Errorf("migrate v2 to v3: %w", err)
+		}
+		return nil
+	}
+
 	// Legacy layouts (user_version 0 covers both fresh databases and the old
 	// pre-v8 table) are dropped and rebuilt; old data is intentionally discarded.
 	schema := `
@@ -101,6 +145,7 @@ func (s *Storage) initSchema() error {
 		failed INTEGER NOT NULL DEFAULT 0,
 		status_code INTEGER NOT NULL DEFAULT 0,
 		failure_body TEXT,
+		response_headers TEXT,
 		input_tokens INTEGER NOT NULL DEFAULT 0,
 		output_tokens INTEGER NOT NULL DEFAULT 0,
 		reasoning_tokens INTEGER NOT NULL DEFAULT 0,
@@ -147,10 +192,10 @@ func (s *Storage) InsertBatch(records []model.UsageRecord) error {
 			auth_id, auth_index, auth_type, source,
 			reasoning_effort, service_tier, response_service_tier,
 			stream, generate, requested_at, latency_ms, ttft_ms,
-			failed, status_code, failure_body,
+			failed, status_code, failure_body, response_headers,
 			input_tokens, output_tokens, reasoning_tokens,
 			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare insert: %w", err)
@@ -194,6 +239,7 @@ func (s *Storage) InsertBatch(records []model.UsageRecord) error {
 			r.Failed,
 			r.Failure.StatusCode,
 			failureBody,
+			serializeFailureHeaders(r.Failed, r.ResponseHeaders),
 			r.Detail.InputTokens,
 			r.Detail.OutputTokens,
 			r.Detail.ReasoningTokens,
@@ -426,7 +472,7 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 			auth_id, auth_index, auth_type, source,
 			reasoning_effort, service_tier, response_service_tier,
 			stream, generate, requested_at, latency_ms, ttft_ms,
-			failed, status_code, COALESCE(failure_body, ''),
+			failed, status_code, COALESCE(failure_body, ''), COALESCE(response_headers, ''),
 			input_tokens, output_tokens, reasoning_tokens,
 			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens
 		FROM usage_records
@@ -441,6 +487,7 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 
 	items := make([]model.StoredRecord, 0, pageSize)
 	for rows.Next() {
+		var rawHeaders string
 		var r model.StoredRecord
 		if err := rows.Scan(
 			&r.ID,
@@ -468,6 +515,7 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 			&r.Failed,
 			&r.StatusCode,
 			&r.FailureBody,
+			&rawHeaders,
 			&r.InputTokens,
 			&r.OutputTokens,
 			&r.ReasoningTokens,
@@ -477,6 +525,9 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 			&r.TotalTokens,
 		); err != nil {
 			return nil, fmt.Errorf("scan record: %w", err)
+		}
+		if rawHeaders != "" {
+			_ = json.Unmarshal([]byte(rawHeaders), &r.ResponseHeaders)
 		}
 		items = append(items, r)
 	}

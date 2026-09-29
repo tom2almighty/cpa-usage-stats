@@ -1,4 +1,6 @@
+import { Button } from '@/components/ui/button';
 import type { PricingState } from '@/lib/pricing';
+import { RefreshCw, Sparkles } from 'lucide-react';
 
 /**
  * Where the prices come from. Always rendered so cost numbers stay honest
@@ -15,26 +17,30 @@ export function PricingSource({ pricing }: { pricing: PricingState }) {
     : '';
 
   return (
-    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+      <Sparkles className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       {loading ? (
-        <span>价格数据加载中…</span>
+        <span>模型价格更新中…</span>
       ) : error && !table ? (
-        <span className="text-destructive">价格数据获取失败：{error}</span>
+        <span className="font-medium text-destructive">价格获取失败：{error}</span>
       ) : (
         <span>
-          价格来自 models.dev
-          {updatedAt && ` · 更新于 ${updatedAt}`}
-          {' · 按标准价估算，不含阶梯价与折扣'}
+          价格数据源 <span className="font-medium text-foreground">models.dev</span>
+          {updatedAt && ` · ${updatedAt}`}
+          <span className="hidden sm:inline"> · 标准价折算</span>
         </span>
       )}
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={refresh}
         disabled={loading}
-        className="rounded-md px-1.5 py-0.5 font-medium underline-offset-4 transition-colors hover:text-foreground hover:underline disabled:opacity-50"
+        className="h-6 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground"
+        title="从 models.dev 重新拉取最新模型价格"
       >
-        刷新价格
-      </button>
+        <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+        <span>刷新</span>
+      </Button>
     </div>
   );
 }

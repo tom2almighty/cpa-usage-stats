@@ -226,3 +226,74 @@ func TestV8FieldsRoundTrip(t *testing.T) {
 		t.Errorf("v8 fields round trip mismatch: %+v", got)
 	}
 }
+// TestFailureHeadersSaved verifies response headers are only saved on failed requests,
+// filtered for sensitive headers, and retrieved properly.
+func TestFailureHeadersSaved(t *testing.T) {
+	store, err := New(filepath.Join(t.TempDir(), "usage.db"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer store.Close()
+
+	successReq := model.UsageRecord{
+		RequestID:   "req-success",
+		Model:       "gpt-4o",
+		Failed:      false,
+		RequestedAt: time.Now(),
+		ResponseHeaders: map[string][]string{
+			"Content-Type": {"application/json"},
+			"X-Request-Id": {"req-success"},
+		},
+	}
+
+	failedReq := model.UsageRecord{
+		RequestID:   "req-failed",
+		Model:       "gpt-4o",
+		Failed:      true,
+		Failure:     model.UsageFailure{StatusCode: 429, Body: "rate limited"},
+		RequestedAt: time.Now(),
+		ResponseHeaders: map[string][]string{
+			"Content-Type":  {"application/json"},
+			"Retry-After":   {"30"},
+			"X-Request-Id":  {"trace-xyz"},
+			"Set-Cookie":    {"secret_session=123"},
+			"Authorization": {"Bearer secret"},
+		},
+	}
+
+	if err := store.InsertBatch([]model.UsageRecord{successReq, failedReq}); err != nil {
+		t.Fatalf("InsertBatch: %v", err)
+	}
+
+	list, err := store.GetRecords(model.UsageFilter{})
+	if err != nil {
+		t.Fatalf("GetRecords: %v", err)
+	}
+	if list.Total != 2 {
+		t.Fatalf("expected 2 records, got %d", list.Total)
+	}
+
+	for _, item := range list.Items {
+		if !item.Failed {
+			if len(item.ResponseHeaders) != 0 {
+				t.Errorf("successful request should not persist response headers, got %+v", item.ResponseHeaders)
+			}
+		} else {
+			if len(item.ResponseHeaders) == 0 {
+				t.Fatalf("failed request should persist response headers")
+			}
+			if _, ok := item.ResponseHeaders["Set-Cookie"]; ok {
+				t.Errorf("Set-Cookie should have been filtered out")
+			}
+			if _, ok := item.ResponseHeaders["Authorization"]; ok {
+				t.Errorf("Authorization should have been filtered out")
+			}
+			if item.ResponseHeaders["Retry-After"][0] != "30" {
+				t.Errorf("expected Retry-After 30, got %v", item.ResponseHeaders["Retry-After"])
+			}
+			if item.ResponseHeaders["X-Request-Id"][0] != "trace-xyz" {
+				t.Errorf("expected X-Request-Id trace-xyz, got %v", item.ResponseHeaders["X-Request-Id"])
+			}
+		}
+	}
+}

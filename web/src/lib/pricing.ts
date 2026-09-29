@@ -2,16 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import type { GroupStat, StoredRecord } from '@/types';
 
 /**
- * Model pricing from models.dev (https://github.com/anomalyco/models.dev).
- *
- * The catalog is a single ~5 MB document, so it is fetched once, reduced to an
- * id -> provider -> price map (~0.5 MB) and cached in localStorage for a day.
- * Every cost shown in the dashboard is an estimate on list prices.
+ * Model pricing from models.dev (https://github.com/anomalyco/models.dev)
+ * with multi-tier fuzzy matching and user custom price override support.
  */
 
 const PRICING_URL = 'https://models.dev/api.json';
 const CACHE_KEY = 'cpa-usage-stats.pricing.v1';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const CUSTOM_PRICING_KEY = 'cpa-usage-stats.custom-pricing.v1';
 
 /** USD per 1M tokens. */
 export type ModelPrice = {
@@ -29,11 +27,13 @@ export type PricingTable = {
 };
 
 export type PriceMatch = {
-  /** models.dev model id the record was matched to. */
+  /** Matched model identifier. */
   modelId: string;
-  /** models.dev provider id the price came from. */
+  /** Provider identifier or 'custom'. */
   providerId: string;
   price: ModelPrice;
+  /** Match confidence / origin. */
+  matchType: 'exact' | 'fuzzy' | 'custom';
 };
 
 /** Token buckets used for costing. */
@@ -45,13 +45,21 @@ export type TokenUsage = {
   cacheWrite: number;
 };
 
-/**
- * How a provider counts cache/reasoning tokens, mirroring CLIProxyAPI's
- * accounting rules (sdk/cliproxy/usage/accounting.go):
- * - subset: cache tokens are part of input, reasoning part of output (OpenAI style)
- * - independent: cache and reasoning are separate counters (Anthropic style)
- * - separateReasoning: cache inside input, reasoning separate from output (Gemini style)
- */
+export type CostBreakdown = {
+  uncachedTokens: number;
+  uncachedCost: number;
+  cacheReadTokens: number;
+  cacheReadCost: number;
+  cacheReadSavings: number;
+  cacheWriteTokens: number;
+  cacheWriteCost: number;
+  outputTokens: number;
+  outputCost: number;
+  reasoningTokens: number;
+  reasoningCost: number;
+  totalCost: number;
+};
+
 type TokenSemantics = 'subset' | 'independent' | 'separateReasoning';
 
 const PROVIDER_HINTS: Record<string, string[]> = {
@@ -68,6 +76,28 @@ const PROVIDER_HINTS: Record<string, string[]> = {
   xai: ['xai'],
   meta: ['meta', 'meta-llama'],
   devin: ['devin', 'cognition'],
+};
+
+/** Common model shorthand aliases mapping to canonical models.dev IDs. */
+const COMMON_ALIASES: Record<string, string[]> = {
+  '4o': ['gpt-4o'],
+  '4o-mini': ['gpt-4o-mini'],
+  'gpt-4o-mini': ['gpt-4o-mini'],
+  o1: ['o1'],
+  'o1-mini': ['o1-mini'],
+  o3: ['o3'],
+  'o3-mini': ['o3-mini'],
+  sonnet: ['claude-3-7-sonnet', 'claude-3-5-sonnet', 'claude-sonnet-4-5'],
+  haiku: ['claude-3-5-haiku', 'claude-3-haiku'],
+  opus: ['claude-3-opus', 'claude-opus-4-5'],
+  flash: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'],
+  'flash-lite': ['gemini-2.5-flash-lite', 'gemini-2.0-flash-lite'],
+  pro: ['gemini-2.5-pro', 'gemini-1.5-pro'],
+  'deepseek-v3': ['deepseek-chat', 'deepseek-v3'],
+  v3: ['deepseek-chat', 'deepseek-v3'],
+  'deepseek-r1': ['deepseek-reasoner', 'deepseek-r1'],
+  r1: ['deepseek-reasoner', 'deepseek-r1'],
+  grok: ['grok-2', 'grok-3', 'grok-latest'],
 };
 
 type RawCost = {
@@ -98,6 +128,50 @@ function toPrice(cost: RawCost | undefined): ModelPrice | null {
   if (cacheWrite !== undefined) price.cacheWrite = cacheWrite;
   return price;
 }
+
+// ---------- Local Custom Pricing ----------
+
+export function getCustomPrices(): Record<string, ModelPrice> {
+  try {
+    const raw = localStorage.getItem(CUSTOM_PRICING_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      return parsed as Record<string, ModelPrice>;
+    }
+  } catch {
+    // Storage unavailable
+  }
+  return {};
+}
+
+export function setCustomPrice(modelName: string, price: ModelPrice): void {
+  const norm = modelName.trim().toLowerCase();
+  if (!norm) return;
+  const current = getCustomPrices();
+  current[norm] = price;
+  try {
+    localStorage.setItem(CUSTOM_PRICING_KEY, JSON.stringify(current));
+    window.dispatchEvent(new CustomEvent('cpa-pricing-update'));
+  } catch {
+    // Storage unavailable
+  }
+}
+
+export function removeCustomPrice(modelName: string): void {
+  const norm = modelName.trim().toLowerCase();
+  if (!norm) return;
+  const current = getCustomPrices();
+  delete current[norm];
+  try {
+    localStorage.setItem(CUSTOM_PRICING_KEY, JSON.stringify(current));
+    window.dispatchEvent(new CustomEvent('cpa-pricing-update'));
+  } catch {
+    // Storage unavailable
+  }
+}
+
+// ---------- models.dev Catalog ----------
 
 /** Reduces the models.dev catalog to the price map the dashboard needs. */
 export function buildPricingTable(catalog: unknown, fetchedAt = Date.now()): PricingTable {
@@ -144,7 +218,7 @@ function writeCache(table: PricingTable) {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(table));
   } catch {
-    // Storage full or unavailable; pricing still works for this session.
+    // Storage full or unavailable
   }
 }
 
@@ -172,25 +246,45 @@ export async function loadPricing(force = false): Promise<PricingTable> {
   }
 }
 
-/** Model-name variants to try, most specific first (CPA names carry dates/prefixes). */
-function lookupKeys(value: string): string[] {
-  const base = value.trim().toLowerCase().replace(/\s+/g, '');
-  if (!base) return [];
-  const keys = new Set<string>();
-  const push = (candidate: string) => {
-    if (candidate) keys.add(candidate);
-  };
-  const variants = [base];
-  const withoutPrefix = base.includes('/') ? base.slice(base.indexOf('/') + 1) : '';
-  if (withoutPrefix) variants.push(withoutPrefix);
+// ---------- Matching Engine ----------
 
-  for (const variant of variants) {
-    push(variant);
-    push(variant.replace(/[-_.:]?\d{8}$/, ''));
-    push(variant.replace(/[-_.:]?v?\d{1,3}(\.\d+)*$/, ''));
-    push(variant.replace(/[-_.]?(latest|preview|beta|exp|experimental)$/, ''));
+/** Generates candidate lookup keys for fuzzy matching. */
+function lookupCandidates(value: string): {
+  exact: string[];
+  derived: string[];
+  aliases: string[];
+} {
+  const base = value.trim().toLowerCase().replace(/\s+/g, '');
+  if (!base) return { exact: [], derived: [], aliases: [] };
+
+  const exact = [base];
+  const derivedSet = new Set<string>();
+  const addDerived = (candidate: string) => {
+    if (candidate && candidate !== base) derivedSet.add(candidate);
+  };
+
+  const withoutPrefix = base.includes('/') ? base.slice(base.indexOf('/') + 1) : '';
+  if (withoutPrefix) {
+    addDerived(withoutPrefix);
   }
-  return [...keys];
+
+  const baseVariants = [base, withoutPrefix].filter(Boolean);
+  for (const v of baseVariants) {
+    // Strip date suffixes like -20250929
+    addDerived(v.replace(/[-_.:]?\d{8}$/, ''));
+    // Strip version tags like -v1, -v1.2
+    addDerived(v.replace(/[-_.:]?v?\d{1,3}(\.\d+)*$/, ''));
+    // Strip common preview/latest tags
+    addDerived(v.replace(/[-_.]?(latest|preview|beta|exp|experimental|chat|instruct)$/, ''));
+    // Convert dots to dashes (e.g. 3.5 -> 3-5) and vice versa
+    if (v.includes('.')) addDerived(v.replace(/\./g, '-'));
+    if (v.includes('-')) addDerived(v.replace(/-/g, '.'));
+  }
+
+  // Common shorthand aliases
+  const aliasList = COMMON_ALIASES[base] ?? COMMON_ALIASES[withoutPrefix] ?? [];
+
+  return { exact, derived: [...derivedSet], aliases: aliasList };
 }
 
 function providerCandidates(provider: string | undefined): string[] {
@@ -212,25 +306,103 @@ function pickPrice(
   return fallback ? { providerId: fallback[0], price: fallback[1] } : null;
 }
 
-/** Resolves a record/group to a models.dev price entry. */
+/** Resolves a record/group to an exact, fuzzy, or custom price entry. */
 export function priceFor(
   table: PricingTable | null,
   ref: { model?: string; responseModel?: string; alias?: string; provider?: string },
 ): PriceMatch | null {
+  const customPrices = getCustomPrices();
+
+  // 1. Check custom price overrides first
+  for (const raw of [ref.responseModel, ref.model, ref.alias]) {
+    const value = (raw ?? '').trim().toLowerCase();
+    if (!value) continue;
+    if (customPrices[value]) {
+      return {
+        modelId: value,
+        providerId: 'custom',
+        price: customPrices[value],
+        matchType: 'custom',
+      };
+    }
+    const clean = value.includes('/') ? value.slice(value.indexOf('/') + 1) : '';
+    if (clean && customPrices[clean]) {
+      return {
+        modelId: clean,
+        providerId: 'custom',
+        price: customPrices[clean],
+        matchType: 'custom',
+      };
+    }
+  }
+
   if (!table) return null;
   const hints = providerCandidates(ref.provider);
+
+  // 2. Exact match check
   for (const raw of [ref.responseModel, ref.model, ref.alias]) {
     const value = (raw ?? '').trim();
     if (!value) continue;
-    for (const key of lookupKeys(value)) {
+    const { exact } = lookupCandidates(value);
+    for (const key of exact) {
       const providers = table.models[key];
-      if (!providers) continue;
-      const picked = pickPrice(providers, hints);
-      if (picked) return { modelId: key, providerId: picked.providerId, price: picked.price };
+      if (providers) {
+        const picked = pickPrice(providers, hints);
+        if (picked)
+          return {
+            modelId: key,
+            providerId: picked.providerId,
+            price: picked.price,
+            matchType: 'exact',
+          };
+      }
     }
   }
+
+  // 3. Derived fuzzy match (punctuation, date/tag stripping)
+  for (const raw of [ref.responseModel, ref.model, ref.alias]) {
+    const value = (raw ?? '').trim();
+    if (!value) continue;
+    const { derived } = lookupCandidates(value);
+    for (const key of derived) {
+      const providers = table.models[key];
+      if (providers) {
+        const picked = pickPrice(providers, hints);
+        if (picked)
+          return {
+            modelId: key,
+            providerId: picked.providerId,
+            price: picked.price,
+            matchType: 'fuzzy',
+          };
+      }
+    }
+  }
+
+  // 4. Shorthand alias match
+  for (const raw of [ref.responseModel, ref.model, ref.alias]) {
+    const value = (raw ?? '').trim();
+    if (!value) continue;
+    const { aliases } = lookupCandidates(value);
+    for (const targetId of aliases) {
+      const providers = table.models[targetId];
+      if (providers) {
+        const picked = pickPrice(providers, hints);
+        if (picked)
+          return {
+            modelId: targetId,
+            providerId: picked.providerId,
+            price: picked.price,
+            matchType: 'fuzzy',
+          };
+      }
+    }
+  }
+
   return null;
 }
+
+// ---------- Cost Calculations ----------
 
 export function tokenSemantics(provider: string | undefined): TokenSemantics {
   const value = (provider ?? '').trim().toLowerCase();
@@ -246,21 +418,40 @@ function perMillion(tokens: number, pricePerMillion: number): number {
   return (tokens / 1_000_000) * pricePerMillion;
 }
 
-/** Estimated USD cost of one usage bucket set, honouring the provider token semantics. */
-export function usageCost(price: ModelPrice, usage: TokenUsage, semantics: TokenSemantics): number {
+export function calculateBreakdown(
+  price: ModelPrice,
+  usage: TokenUsage,
+  semantics: TokenSemantics,
+): CostBreakdown {
   const cacheInsideInput = semantics !== 'independent';
-  const uncached = cacheInsideInput
+  const uncachedTokens = cacheInsideInput
     ? Math.max(0, usage.input - usage.cacheRead - usage.cacheWrite)
     : usage.input;
-  const reasoning = semantics === 'separateReasoning' ? usage.reasoning : 0;
+  const reasoningTokens = semantics === 'separateReasoning' ? usage.reasoning : 0;
 
-  return (
-    perMillion(uncached, price.input) +
-    perMillion(usage.cacheRead, price.cacheRead ?? price.input) +
-    perMillion(usage.cacheWrite, price.cacheWrite ?? price.input) +
-    perMillion(usage.output, price.output) +
-    perMillion(reasoning, price.reasoning ?? price.output)
-  );
+  const uncachedCost = perMillion(uncachedTokens, price.input);
+  const cacheReadPrice = price.cacheRead ?? price.input;
+  const cacheReadCost = perMillion(usage.cacheRead, cacheReadPrice);
+  const cacheReadSavings = Math.max(0, perMillion(usage.cacheRead, price.input) - cacheReadCost);
+  const cacheWriteCost = perMillion(usage.cacheWrite, price.cacheWrite ?? price.input);
+  const outputCost = perMillion(usage.output, price.output);
+  const reasoningCost = perMillion(reasoningTokens, price.reasoning ?? price.output);
+  const totalCost = uncachedCost + cacheReadCost + cacheWriteCost + outputCost + reasoningCost;
+
+  return {
+    uncachedTokens,
+    uncachedCost,
+    cacheReadTokens: usage.cacheRead,
+    cacheReadCost,
+    cacheReadSavings,
+    cacheWriteTokens: usage.cacheWrite,
+    cacheWriteCost,
+    outputTokens: usage.output,
+    outputCost,
+    reasoningTokens,
+    reasoningCost,
+    totalCost,
+  };
 }
 
 function usageOfRecord(record: StoredRecord): TokenUsage {
@@ -283,7 +474,11 @@ function usageOfGroup(group: GroupStat): TokenUsage {
   };
 }
 
-export type RecordCost = { match: PriceMatch; cost: number };
+export type RecordCost = {
+  match: PriceMatch;
+  cost: number;
+  breakdown: CostBreakdown;
+};
 
 /** Estimated cost of a single stored record, or null when no price is known. */
 export function recordCost(table: PricingTable | null, record: StoredRecord): RecordCost | null {
@@ -294,18 +489,34 @@ export function recordCost(table: PricingTable | null, record: StoredRecord): Re
     provider: record.provider,
   });
   if (!match) return null;
-  return {
-    match,
-    cost: usageCost(match.price, usageOfRecord(record), tokenSemantics(record.provider)),
-  };
+  const semantics = tokenSemantics(record.provider);
+  const usage = usageOfRecord(record);
+  const breakdown = calculateBreakdown(match.price, usage, semantics);
+  return { match, cost: breakdown.totalCost, breakdown };
 }
 
-/** Estimated cost of a summary group row (model ranking / provider breakdown). */
-export function groupCost(table: PricingTable | null, group: GroupStat): number | null {
+export type GroupCostResult = {
+  match: PriceMatch;
+  cost: number;
+  breakdown: CostBreakdown;
+};
+
+export function groupCostDetails(
+  table: PricingTable | null,
+  group: GroupStat,
+): GroupCostResult | null {
   const provider = group.secondary ?? '';
   const match = priceFor(table, { model: group.name, provider });
   if (!match) return null;
-  return usageCost(match.price, usageOfGroup(group), tokenSemantics(provider));
+  const semantics = tokenSemantics(provider);
+  const usage = usageOfGroup(group);
+  const breakdown = calculateBreakdown(match.price, usage, semantics);
+  return { match, cost: breakdown.totalCost, breakdown };
+}
+
+export function groupCost(table: PricingTable | null, group: GroupStat): number | null {
+  const res = groupCostDetails(table, group);
+  return res ? res.cost : null;
 }
 
 export type CostTotal = { cost: number; priced: number; total: number };
@@ -321,10 +532,6 @@ export function totalCost(table: PricingTable | null, groups: GroupStat[]): Cost
     priced += 1;
   }
   return { cost, priced, total: groups.length };
-}
-
-export function isPricingStale(table: PricingTable | null): boolean {
-  return !table || Date.now() - table.fetchedAt >= CACHE_TTL_MS;
 }
 
 export type PricingState = {
@@ -361,6 +568,13 @@ export function usePricing(): PricingState {
       alive = false;
     };
   }, [nonce]);
+
+  // Re-run matching whenever custom prices are modified in localStorage
+  useEffect(() => {
+    const onCustomUpdate = () => setNonce((n) => n + 1);
+    window.addEventListener('cpa-pricing-update', onCustomUpdate);
+    return () => window.removeEventListener('cpa-pricing-update', onCustomUpdate);
+  }, []);
 
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
 

@@ -94,9 +94,10 @@ type StoredRecord struct {
 	LatencyMs           int64     `json:"latency_ms"`
 	TTFTMs              int64     `json:"ttft_ms"`
 	Failed              bool      `json:"failed"`
-	StatusCode          int       `json:"status_code"`
-	FailureBody         string    `json:"failure_body,omitempty"`
-	InputTokens         int64     `json:"input_tokens"`
+	StatusCode          int                 `json:"status_code"`
+	FailureBody         string              `json:"failure_body,omitempty"`
+	ResponseHeaders     map[string][]string `json:"response_headers,omitempty"`
+	InputTokens         int64               `json:"input_tokens"`
 	OutputTokens        int64     `json:"output_tokens"`
 	ReasoningTokens     int64     `json:"reasoning_tokens"`
 	CachedTokens        int64     `json:"cached_tokens"`

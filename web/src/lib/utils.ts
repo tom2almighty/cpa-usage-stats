@@ -64,3 +64,36 @@ export function formatUnitPrice(value: number): string {
   if (value < 1) return `$${value.toFixed(2).replace(/0$/, '')}`;
   return `$${Number.isInteger(value) ? value : value.toFixed(2)}`;
 }
+/** Masks API key showing beginning prefix and last 4 characters. */
+export function maskApiKey(key: string): string {
+  if (!key || key.trim() === '' || key === '-') return '-';
+  const trimmed = key.trim();
+  if (trimmed.length <= 8) {
+    if (trimmed.length <= 4) return '••••';
+    return `${trimmed.slice(0, 2)}••••${trimmed.slice(-2)}`;
+  }
+  if (trimmed.startsWith('sk-proj-') && trimmed.length > 16) {
+    return `sk-proj-••••${trimmed.slice(-4)}`;
+  }
+  if (trimmed.startsWith('sk-ant-') && trimmed.length > 15) {
+    return `sk-ant-••••${trimmed.slice(-4)}`;
+  }
+  if (trimmed.length > 14) {
+    return `${trimmed.slice(0, 6)}••••${trimmed.slice(-4)}`;
+  }
+  return `${trimmed.slice(0, 4)}••••${trimmed.slice(-3)}`;
+}
+
+/** Asynchronously copies text to system clipboard. */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  if (!text) return false;
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fallback or permission denied
+  }
+  return false;
+}

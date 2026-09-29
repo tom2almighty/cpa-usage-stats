@@ -70,6 +70,7 @@ export interface StoredRecord {
   failed: boolean;
   status_code: number;
   failure_body?: string;
+  response_headers?: Record<string, string[]>;
   input_tokens: number;
   output_tokens: number;
   reasoning_tokens: number;

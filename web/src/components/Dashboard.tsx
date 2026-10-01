@@ -122,7 +122,7 @@ export function Dashboard() {
               setPage(1);
             }}
             aria-label={t("dashboard.range.label")}
-            className="max-w-full flex-wrap bg-muted p-[3px]"
+            className="max-w-full flex-wrap bg-muted p-0.75"
           >
             {RANGE_OPTIONS.map((value) => (
               <ToggleGroupItem key={value} value={value} size="sm">

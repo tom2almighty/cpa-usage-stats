@@ -125,7 +125,7 @@ export function DonutChart({ stats, metric, className }: DonutChartProps) {
               active === index && "bg-muted/60",
             )}
           >
-            <span className="size-2 shrink-0 rounded-[2px]" style={{ background: slice.fill }} />
+            <span className="size-2 shrink-0 rounded-xs" style={{ background: slice.fill }} />
             <span className="min-w-0 flex-1 truncate">{slice.name}</span>
             <span className="shrink-0 font-mono text-muted-foreground">{formatValue(slice.value)}</span>
             <span className="w-10 shrink-0 text-right font-mono tabular-nums text-muted-foreground">

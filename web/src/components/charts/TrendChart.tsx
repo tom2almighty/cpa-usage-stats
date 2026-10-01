@@ -162,7 +162,7 @@ export function TrendChart({ points, hourly, className }: TrendChartProps) {
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
         {SERIES.map((series) => (
           <span key={series.key} className="inline-flex items-center gap-1.5">
-            <span className="size-2 shrink-0 rounded-[2px]" style={{ background: series.color }} />
+            <span className="size-2 shrink-0 rounded-xs" style={{ background: series.color }} />
             {labels[series.key]}
           </span>
         ))}

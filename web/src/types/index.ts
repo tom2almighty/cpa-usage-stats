@@ -40,7 +40,7 @@ export interface SummaryData {
   model_stats: GroupStat[];
   provider_stats: GroupStat[];
   api_key_stats: GroupStat[];
-  bucket: 'hour' | 'day';
+  bucket: "hour" | "day";
   trend: TrendPoint[];
 }
 
@@ -93,14 +93,14 @@ export interface OptionsResponse {
   api_keys: string[];
 }
 
-export type TimeRange = 'today' | 'yesterday' | '7d' | '30d' | 'all';
+export type TimeRange = "today" | "yesterday" | "7d" | "30d" | "all";
 
-export type TabKey = 'overview' | 'records';
+export type TabKey = "overview" | "records";
 
 export interface RecordsFilters {
   model: string;
   provider: string;
   apiKey: string;
-  status: 'all' | 'success' | 'failed';
+  status: "all" | "success" | "failed";
   keyword: string;
 }

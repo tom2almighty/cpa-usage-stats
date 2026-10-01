@@ -1,26 +1,34 @@
 /**
- * Management-key resolution for the trusted plugin resource page.
+ * 管理密钥解析。
  *
- * The official management center persists its connection state (including the
- * management key when "remember password" is on) in localStorage under
- * 'cli-proxy-auth', obfuscated with a reversible XOR + base64 scheme. The
- * plugin resource page runs same-origin inside the management center iframe,
- * so it can decode that entry and reuse the key against the plugin's own
- * /v0/management routes. When decoding fails (cross-origin deployment or
- * "remember password" off) the dashboard falls back to a key the user types
- * in, stored under this plugin's own localStorage entry.
+ * 看板由 CLIProxyAPI 以资源页形式挂在管理中心 iframe 内，同源时可以复用
+ * 面板保存的密钥；跨源或未保存时退回用户手动输入，存在本插件自己的键里。
+ * 顺序：本插件保存 → cpa-dashboard 面板保存 → 管理中心保存。
  */
 
-const MC_AUTH_KEY = 'cli-proxy-auth';
-const ENC_PREFIX = 'enc::v1::';
-const SECRET_SALT = 'cli-proxy-api-webui::secure-storage';
-export const OWN_KEY_STORAGE = 'cpa-usage-stats.management-key';
-/** Management key entry used by the cpa-dashboard panel. */
-const PANEL_KEY_STORAGE = 'cpa-dashboard.management-key';
+const MC_AUTH_KEY = "cli-proxy-auth";
+const ENC_PREFIX = "enc::v1::";
+const SECRET_SALT = "cli-proxy-api-webui::secure-storage";
+const OWN_KEY_STORAGE = "cpa-usage-stats.management-key";
+const PANEL_KEY_STORAGE = "cpa-dashboard.management-key";
+
+export type KeySource = "own" | "panel" | "center";
+
+interface ResolvedKey {
+  key: string;
+  source: KeySource;
+}
+
+function readStorage(read: () => string): string {
+  try {
+    return read() ?? "";
+  } catch {
+    // 隐私模式下 storage 不可用
+    return "";
+  }
+}
 
 function getKeyBytes(): Uint8Array {
-  // Same inputs as the management center: the salt, the page host and the
-  // user agent. Inside the iframe host and UA match the parent page.
   const host = window.location.host;
   const ua = navigator.userAgent;
   return new TextEncoder().encode(`${SECRET_SALT}|${host}|${ua}`);
@@ -43,19 +51,15 @@ function base64ToBytes(b64: string): Uint8Array {
   return bytes;
 }
 
-export function deobfuscate(payload: string): string {
+/** 管理中心用 XOR + base64 混淆保存连接状态，这里做同样的还原 */
+function deobfuscate(payload: string): string {
   if (!payload.startsWith(ENC_PREFIX)) return payload;
   const encrypted = base64ToBytes(payload.slice(ENC_PREFIX.length));
   return new TextDecoder().decode(xorBytes(encrypted, getKeyBytes()));
 }
 
-/** Key the user typed in, stored under the plugin's own entry. */
 export function getStoredOwnKey(): string {
-  try {
-    return localStorage.getItem(OWN_KEY_STORAGE) ?? '';
-  } catch {
-    return '';
-  }
+  return readStorage(() => localStorage.getItem(OWN_KEY_STORAGE) ?? "");
 }
 
 export function storeOwnKey(key: string) {
@@ -66,63 +70,57 @@ export function storeOwnKey(key: string) {
       localStorage.removeItem(OWN_KEY_STORAGE);
     }
   } catch {
-    // Storage may be unavailable (privacy mode); the key just won't persist.
+    // 隐私模式下无法持久化，本次会话仍然可用
   }
 }
 
 export function clearOwnKey() {
-  storeOwnKey('');
+  storeOwnKey("");
 }
 
-/**
- * Returns the management key to use, trying in order:
- * 1. the key saved by this dashboard,
- * 2. the key saved by the cpa-dashboard panel (same-origin iframe),
- * 3. the official management center's saved key (same-origin only).
- */
-export function resolveManagementKey(): string {
-  const own = getStoredOwnKey();
-  if (own) return own;
+function fromPanel(): string {
+  return readStorage(() => sessionStorage.getItem(PANEL_KEY_STORAGE) ?? localStorage.getItem(PANEL_KEY_STORAGE) ?? "");
+}
 
-  // cpa-dashboard 把管理密钥存在 sessionStorage(默认)或 localStorage(勾选记住)里
+function fromManagementCenter(): string {
+  const raw = readStorage(() => localStorage.getItem(MC_AUTH_KEY) ?? "");
+  if (!raw) return "";
   try {
-    const panelKey =
-      sessionStorage.getItem(PANEL_KEY_STORAGE) ?? localStorage.getItem(PANEL_KEY_STORAGE);
-    if (panelKey) return panelKey;
-  } catch {
-    // Storage may be unavailable (privacy mode); fall through to the next source.
-  }
-
-  try {
-    const raw = localStorage.getItem(MC_AUTH_KEY);
-    if (!raw) return '';
     const parsed: unknown = JSON.parse(deobfuscate(raw));
-    if (
-      parsed &&
-      typeof parsed === 'object' &&
-      'managementKey' in parsed &&
-      typeof parsed.managementKey === 'string'
-    ) {
-      return parsed.managementKey;
+    if (parsed && typeof parsed === "object" && "managementKey" in parsed) {
+      const key: unknown = parsed.managementKey;
+      return typeof key === "string" ? key : "";
     }
   } catch {
-    // Not same-origin, obfuscation format changed, or garbage — fall through.
+    // 非同源、混淆格式变化或内容损坏
   }
-  return '';
+  return "";
+}
+
+/** 返回可用的管理密钥及其来源；都没有时返回空 key。 */
+export function resolveManagementKey(): ResolvedKey {
+  const own = getStoredOwnKey();
+  if (own) return { key: own, source: "own" };
+
+  const panel = fromPanel();
+  if (panel) return { key: panel, source: "panel" };
+
+  const center = fromManagementCenter();
+  if (center) return { key: center, source: "center" };
+
+  return { key: "", source: "own" };
 }
 
 /**
- * Base URL for the plugin management API. The resource page is always served
- * by CLIProxyAPI itself, so the API lives on the page's own origin. A
- * ?api_base= query param overrides it for local development against a
- * separately running host.
+ * 插件管理接口的 base。资源页始终由 CLIProxyAPI 自己提供，因此接口默认同源；
+ * `?api_base=` 用于本地起前端调试远程宿主。
  */
 export function resolveApiBase(): string {
   try {
-    const override = new URLSearchParams(window.location.search).get('api_base');
-    if (override) return override.replace(/\/+$/, '');
+    const override = new URLSearchParams(window.location.search).get("api_base");
+    if (override) return override.replace(/\/+$/, "");
   } catch {
-    // Malformed URL; fall through to same-origin.
+    // URL 异常时按同源处理
   }
   return window.location.origin;
 }

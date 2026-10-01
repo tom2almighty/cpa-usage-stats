@@ -1,0 +1,240 @@
+{
+  "common": {
+    "refresh": "刷新",
+    "copy": "复制",
+    "copied": "已复制",
+    "cancel": "取消",
+    "save": "保存",
+    "search": "搜索",
+    "total": "共 {{count}} 项",
+    "close": "关闭"
+  },
+  "theme": {
+    "title": "主题",
+    "light": "浅色",
+    "dark": "深色",
+    "system": "跟随系统"
+  },
+  "language": {
+    "title": "语言"
+  },
+  "dashboard": {
+    "title": "CLIProxyAPI 用量统计",
+    "subtitle": "v8 用量观察 · SQLite 持久化 · 请求 / Token / 成本多维看板",
+    "range": {
+      "today": "今日",
+      "yesterday": "昨天",
+      "7d": "近 7 天",
+      "30d": "近 30 天",
+      "all": "全部",
+      "label": "时间范围"
+    },
+    "auto_refresh": {
+      "10": "每 10 秒",
+      "30": "每 30 秒",
+      "60": "每 60 秒",
+      "label": "自动刷新",
+      "off": "不自动刷新"
+    },
+    "tabs": {
+      "overview": "用量总览",
+      "records": "调用明细"
+    },
+    "load_failed": "数据加载失败：{{message}}",
+    "empty": {
+      "title": "该时间范围内没有记录",
+      "desc": "换一个时间范围，或确认 CLIProxyAPI 已经产生模型调用。"
+    },
+    "key": {
+      "label": "管理密钥",
+      "status_connected": "已连接",
+      "status_missing": "未配置",
+      "action": "管理密钥",
+      "dialog_title": "管理密钥",
+      "dialog_desc": "看板通过 CLIProxyAPI 管理接口读取用量数据，需要管理密钥。密钥只保存在浏览器本地。",
+      "placeholder": "management.secret-key 或 MANAGEMENT_PASSWORD",
+      "show": "显示密钥",
+      "hide": "隐藏密钥",
+      "submit": "连接",
+      "clear": "清除已保存的密钥",
+      "invalid": "管理密钥无效或已过期，请重新输入。",
+      "ban_hint": "管理密钥连续输错 5 次会被 CLIProxyAPI 判定为认证失败并临时封禁该 IP 约 30 分钟，请确认密钥无误后再连接。",
+      "source": {
+        "own": "本插件保存",
+        "panel": "cpa-dashboard 面板",
+        "center": "管理中心"
+      },
+      "source_label": "来源：{{source}}"
+    }
+  },
+  "overview": {
+    "kpi": {
+      "requests": "总请求数",
+      "tokens": "Token 总消耗",
+      "io_tokens": "输入 / 输出 Tokens",
+      "latency": "平均响应 / 首字延迟",
+      "cost": "预估成本",
+      "success_rate": "成功率",
+      "failed_count": "{{count}} 失败",
+      "tokens_raw": "{{count}} tokens",
+      "reasoning": "思考 {{value}}",
+      "cache_read": "缓存读 {{value}}",
+      "cache_write": "缓存写 {{value}}",
+      "ttft": "TTFT {{value}}",
+      "priced": "{{priced}}/{{total}} 个模型已匹配价格",
+      "pricing_unavailable": "价格数据不可用",
+      "no_cost_data": "暂无价格数据"
+    },
+    "trend": {
+      "hourly": "按小时走势",
+      "daily": "按天走势",
+      "requests_ok": "成功请求",
+      "failed_requests": "失败请求",
+      "input_tokens": "输入 Tokens",
+      "output_tokens": "输出 Tokens",
+      "total_tokens": "合计 {{value}}",
+      "empty": "暂无趋势数据"
+    },
+    "provider": {
+      "title": "Provider 分布",
+      "empty": "暂无 Provider 数据",
+      "share": "占比"
+    },
+    "models": {
+      "title": "模型用量排行",
+      "count": "共 {{count}} 个模型",
+      "empty": "暂无统计数据",
+      "th": {
+        "index": "#",
+        "model": "模型",
+        "provider": "Provider",
+        "requests": "请求数",
+        "tokens": "Tokens（入/出）",
+        "reasoning_cache": "思考 / 缓存读写",
+        "price": "价格（入/出 · 1M）",
+        "cost": "预估成本",
+        "latency": "平均延迟",
+        "share": "占比"
+      },
+      "set_price": "未定价（点击设置）",
+      "custom_badge": "自定义",
+      "fuzzy_hint": "模糊匹配自 {{id}}"
+    },
+    "keys": {
+      "title": "客户端 Key 用量",
+      "count": "共 {{count}} 个",
+      "empty": "暂无 Key 数据",
+      "copy_key": "复制完整 Key",
+      "th": {
+        "key": "API Key（已脱敏）",
+        "requests": "请求数",
+        "failed": "失败数",
+        "tokens": "总 Tokens",
+        "latency": "平均延迟"
+      }
+    }
+  },
+  "pricing": {
+    "source": "价格数据源",
+    "provider_name": "models.dev",
+    "standard_note": "标准价折算",
+    "loading": "模型价格更新中…",
+    "failed": "价格获取失败：{{message}}",
+    "refresh_title": "从 models.dev 重新拉取最新模型价格",
+    "cost_is_estimate": "成本按模型列表价估算，仅作参考",
+    "match": {
+      "custom": "自定义单价",
+      "fuzzy": "推断自 {{id}}",
+      "exact": "models.dev：{{id}}"
+    },
+    "breakdown": {
+      "input": "输入",
+      "output": "输出",
+      "reasoning": "思考",
+      "cache_read": "缓存读",
+      "savings": "缓存节省 ~{{value}}"
+    },
+    "dialog": {
+      "title": "自定义模型价格",
+      "desc": "为模型 {{model}} 设置单价（美元 / 100 万 Tokens）。价格保存在本地，优先于 models.dev 目录。",
+      "input": "输入单价 ($ / 1M)",
+      "output": "输出单价 ($ / 1M)",
+      "cache_read": "缓存读取单价（可选）",
+      "cache_write": "缓存写入单价（可选）",
+      "reasoning": "思考 / 推理单价（可选，缺省沿用输出价）",
+      "placeholder_required": "例如 {{value}}",
+      "placeholder_optional": "留空则不单独计价",
+      "reasoning_placeholder": "缺省等于输出单价",
+      "invalid": "请输入有效的非负输入与输出单价",
+      "remove": "清除自定义价格"
+    }
+  },
+  "records": {
+    "title": "调用明细",
+    "count": "共 {{count}} 条记录",
+    "reset_filters": "重置筛选",
+    "search_placeholder": "搜索 Key / 模型 / Request / Trace / Session…",
+    "empty": "无匹配记录",
+    "filter": {
+      "model_all": "全部模型",
+      "provider_all": "全部 Provider",
+      "key_all": "全部 Key",
+      "status_all": "全部状态",
+      "status_success": "仅成功（2xx）",
+      "status_failed": "仅失败（4xx/5xx）"
+    },
+    "th": {
+      "time": "时间",
+      "status": "状态",
+      "model": "模型",
+      "provider": "Provider",
+      "tokens": "Tokens（入 / 出 / 总）",
+      "cost": "预估成本",
+      "latency": "耗时 / TTFT",
+      "key": "Key / 认证"
+    },
+    "row": {
+      "alias": "别名 {{name}}",
+      "upstream": "上游 {{name}}",
+      "cache": "缓存 读 {{read}} / 写 {{write}}",
+      "throughput": "{{value}} t/s",
+      "copy_key": "复制完整 Key"
+    },
+    "detail": {
+      "request_id": "Request ID",
+      "trace_id": "Trace ID",
+      "session_id": "Session ID",
+      "source": "来源",
+      "base_url": "上游 Base URL",
+      "auth": "认证凭据",
+      "reasoning_effort": "推理力度",
+      "service_tier": "Service Tier（请求 → 响应）",
+      "mode": "模式与标记",
+      "stream": "流式",
+      "non_stream": "非流式",
+      "generate": "生成",
+      "not_generate": "非生成",
+      "pricing_source": "模型定价来源",
+      "tokens_detail": "Tokens 与费用明细",
+      "tokens_formula": "入 {{input}} · 出 {{output}}",
+      "tokens_reasoning": " · 思考 {{value}}",
+      "tokens_cache_read": " · 缓存读 {{value}}",
+      "tokens_cache_write": " · 缓存写 {{value}}",
+      "tokens_total": " = {{value}}",
+      "estimate": "[预估 {{value}}]",
+      "unmatched": "未匹配",
+      "failure_title": "失败响应诊断（HTTP {{status}}）",
+      "failure_body": "响应体",
+      "failure_headers": "上游响应头"
+    },
+    "pagination": {
+      "summary": "第 {{page}} 页 / 共 {{pages}} 页 · 每页 {{size}} 条",
+      "prev": "上一页",
+      "next": "下一页"
+    }
+  },
+  "auth": {
+    "title": "需要管理密钥",
+    "desc": "未能自动读取管理密钥（面板未保存密钥，或看板与 CLIProxyAPI 跨源部署）。请输入管理密钥后重试。"
+  }
+}

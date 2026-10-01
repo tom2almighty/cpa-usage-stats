@@ -1,45 +1,53 @@
-import { Button } from '@/components/ui/button';
-import type { PricingState } from '@/lib/pricing';
-import { RefreshCw, Sparkles } from 'lucide-react';
+import { RefreshCw, Sparkles } from "lucide-react";
+import { useMemo } from "react";
+import { Button } from "@/components/ui/button";
+import type { PricingState } from "@/hooks/use-pricing";
+import { useI18n } from "@/i18n/context";
 
 /**
- * Where the prices come from. Always rendered so cost numbers stay honest
- * about being list-price estimates.
+ * 价格来源说明。成本数字是按 models.dev 列表价折算的估算值，
+ * 所以这里始终展示来源与更新时间，避免被当成账单。
  */
 export function PricingSource({ pricing }: { pricing: PricingState }) {
+  const { t } = useI18n();
   const { table, loading, error, refresh } = pricing;
-  const updatedAt = table
-    ? new Date(table.fetchedAt).toLocaleString('zh-CN', {
-        hour12: false,
-        dateStyle: 'short',
-        timeStyle: 'short',
-      })
-    : '';
+
+  const updatedAt = useMemo(
+    () =>
+      table
+        ? new Date(table.fetchedAt).toLocaleString(undefined, {
+            hour12: false,
+            dateStyle: "short",
+            timeStyle: "short",
+          })
+        : "",
+    [table],
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-      <Sparkles className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <Sparkles className="size-3.5 shrink-0" />
       {loading ? (
-        <span>模型价格更新中…</span>
+        <span>{t("pricing.loading")}</span>
       ) : error && !table ? (
-        <span className="font-medium text-destructive">价格获取失败：{error}</span>
+        <span className="font-medium text-destructive">{t("pricing.failed", { message: error })}</span>
       ) : (
         <span>
-          价格数据源 <span className="font-medium text-foreground">models.dev</span>
+          {t("pricing.source")} <span className="font-medium text-foreground">{t("pricing.provider_name")}</span>
           {updatedAt && ` · ${updatedAt}`}
-          <span className="hidden sm:inline"> · 标准价折算</span>
+          <span className="hidden sm:inline"> · {t("pricing.standard_note")}</span>
         </span>
       )}
       <Button
         variant="ghost"
-        size="sm"
+        size="xs"
         onClick={refresh}
         disabled={loading}
-        className="h-6 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground"
-        title="从 models.dev 重新拉取最新模型价格"
+        title={t("pricing.refresh_title")}
+        className="gap-1 text-muted-foreground hover:text-foreground"
       >
-        <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
-        <span>刷新</span>
+        <RefreshCw className={loading ? "animate-spin" : undefined} />
+        {t("common.refresh")}
       </Button>
     </div>
   );

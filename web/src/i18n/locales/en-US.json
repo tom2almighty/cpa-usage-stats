@@ -1,0 +1,240 @@
+{
+  "common": {
+    "refresh": "Refresh",
+    "copy": "Copy",
+    "copied": "Copied",
+    "cancel": "Cancel",
+    "save": "Save",
+    "search": "Search",
+    "total": "{{count}} items",
+    "close": "Close"
+  },
+  "theme": {
+    "title": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "language": {
+    "title": "Language"
+  },
+  "dashboard": {
+    "title": "CLIProxyAPI Usage Stats",
+    "subtitle": "v8 usage observer · SQLite persistence · requests / tokens / cost dashboard",
+    "range": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "7d": "Last 7 days",
+      "30d": "Last 30 days",
+      "all": "All",
+      "label": "Time range"
+    },
+    "auto_refresh": {
+      "10": "Every 10s",
+      "30": "Every 30s",
+      "60": "Every 60s",
+      "label": "Auto refresh",
+      "off": "Off"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "records": "Records"
+    },
+    "load_failed": "Failed to load data: {{message}}",
+    "empty": {
+      "title": "No records in this range",
+      "desc": "Pick another range, or make sure CLIProxyAPI has served model requests."
+    },
+    "key": {
+      "label": "Management key",
+      "status_connected": "Connected",
+      "status_missing": "Not configured",
+      "action": "Management key",
+      "dialog_title": "Management key",
+      "dialog_desc": "The dashboard reads usage data through the CLIProxyAPI management API, so a management key is required. It is stored in this browser only.",
+      "placeholder": "management.secret-key or MANAGEMENT_PASSWORD",
+      "show": "Show key",
+      "hide": "Hide key",
+      "submit": "Connect",
+      "clear": "Clear saved key",
+      "invalid": "The management key is invalid or expired, please enter it again.",
+      "ban_hint": "Five consecutive failures make CLIProxyAPI ban this IP for about 30 minutes; double-check the key before connecting.",
+      "source": {
+        "own": "saved by this plugin",
+        "panel": "cpa-dashboard panel",
+        "center": "management center"
+      },
+      "source_label": "Source: {{source}}"
+    }
+  },
+  "overview": {
+    "kpi": {
+      "requests": "Total requests",
+      "tokens": "Total tokens",
+      "io_tokens": "Input / output tokens",
+      "latency": "Avg latency / TTFT",
+      "cost": "Estimated cost",
+      "success_rate": "success rate",
+      "failed_count": "{{count}} failed",
+      "tokens_raw": "{{count}} tokens",
+      "reasoning": "Reasoning {{value}}",
+      "cache_read": "Cache read {{value}}",
+      "cache_write": "Cache write {{value}}",
+      "ttft": "TTFT {{value}}",
+      "priced": "{{priced}}/{{total}} models priced",
+      "pricing_unavailable": "Pricing data unavailable",
+      "no_cost_data": "No pricing data"
+    },
+    "trend": {
+      "hourly": "Hourly trend",
+      "daily": "Daily trend",
+      "requests_ok": "Succeeded",
+      "failed_requests": "Failed",
+      "input_tokens": "Input tokens",
+      "output_tokens": "Output tokens",
+      "total_tokens": "{{value}} total",
+      "empty": "No trend data"
+    },
+    "provider": {
+      "title": "Provider distribution",
+      "empty": "No provider data",
+      "share": "Share"
+    },
+    "models": {
+      "title": "Model ranking",
+      "count": "{{count}} models",
+      "empty": "No statistics yet",
+      "th": {
+        "index": "#",
+        "model": "Model",
+        "provider": "Provider",
+        "requests": "Requests",
+        "tokens": "Tokens (in/out)",
+        "reasoning_cache": "Reasoning / cache r/w",
+        "price": "Price (in/out · 1M)",
+        "cost": "Est. cost",
+        "latency": "Avg latency",
+        "share": "Share"
+      },
+      "set_price": "No price (click to set)",
+      "custom_badge": "Custom",
+      "fuzzy_hint": "Fuzzy matched from {{id}}"
+    },
+    "keys": {
+      "title": "Client key usage",
+      "count": "{{count}} keys",
+      "empty": "No key data",
+      "copy_key": "Copy full key",
+      "th": {
+        "key": "API key (masked)",
+        "requests": "Requests",
+        "failed": "Failed",
+        "tokens": "Total tokens",
+        "latency": "Avg latency"
+      }
+    }
+  },
+  "pricing": {
+    "source": "Pricing source",
+    "provider_name": "models.dev",
+    "standard_note": "list prices",
+    "loading": "Updating model prices…",
+    "failed": "Failed to fetch prices: {{message}}",
+    "refresh_title": "Re-fetch the latest model prices from models.dev",
+    "cost_is_estimate": "Costs are estimated from list prices and are indicative only",
+    "match": {
+      "custom": "Custom price",
+      "fuzzy": "Inferred from {{id}}",
+      "exact": "models.dev: {{id}}"
+    },
+    "breakdown": {
+      "input": "Input",
+      "output": "Output",
+      "reasoning": "Reasoning",
+      "cache_read": "Cache read",
+      "savings": "Cache savings ~{{value}}"
+    },
+    "dialog": {
+      "title": "Custom model price",
+      "desc": "Set the unit price for {{model}} (USD per 1M tokens). It is stored locally and takes precedence over the models.dev catalog.",
+      "input": "Input price ($ / 1M)",
+      "output": "Output price ($ / 1M)",
+      "cache_read": "Cache read price (optional)",
+      "cache_write": "Cache write price (optional)",
+      "reasoning": "Reasoning price (optional, defaults to output price)",
+      "placeholder_required": "e.g. {{value}}",
+      "placeholder_optional": "Leave empty to skip",
+      "reasoning_placeholder": "Defaults to the output price",
+      "invalid": "Enter valid non-negative input and output prices",
+      "remove": "Remove custom price"
+    }
+  },
+  "records": {
+    "title": "Request records",
+    "count": "{{count}} records",
+    "reset_filters": "Reset filters",
+    "search_placeholder": "Search key / model / request / trace / session…",
+    "empty": "No matching records",
+    "filter": {
+      "model_all": "All models",
+      "provider_all": "All providers",
+      "key_all": "All keys",
+      "status_all": "All statuses",
+      "status_success": "Success only (2xx)",
+      "status_failed": "Failed only (4xx/5xx)"
+    },
+    "th": {
+      "time": "Time",
+      "status": "Status",
+      "model": "Model",
+      "provider": "Provider",
+      "tokens": "Tokens (in / out / total)",
+      "cost": "Est. cost",
+      "latency": "Latency / TTFT",
+      "key": "Key / auth"
+    },
+    "row": {
+      "alias": "alias {{name}}",
+      "upstream": "upstream {{name}}",
+      "cache": "cache read {{read}} / write {{write}}",
+      "throughput": "{{value}} t/s",
+      "copy_key": "Copy full key"
+    },
+    "detail": {
+      "request_id": "Request ID",
+      "trace_id": "Trace ID",
+      "session_id": "Session ID",
+      "source": "Source",
+      "base_url": "Upstream base URL",
+      "auth": "Auth credential",
+      "reasoning_effort": "Reasoning effort",
+      "service_tier": "Service tier (request → response)",
+      "mode": "Mode & flags",
+      "stream": "Stream",
+      "non_stream": "Non-stream",
+      "generate": "Generate",
+      "not_generate": "Non-generate",
+      "pricing_source": "Pricing source",
+      "tokens_detail": "Tokens & cost breakdown",
+      "tokens_formula": "in {{input}} · out {{output}}",
+      "tokens_reasoning": " · reasoning {{value}}",
+      "tokens_cache_read": " · cache read {{value}}",
+      "tokens_cache_write": " · cache write {{value}}",
+      "tokens_total": " = {{value}}",
+      "estimate": "[est. {{value}}]",
+      "unmatched": "Unmatched",
+      "failure_title": "Failure diagnostics (HTTP {{status}})",
+      "failure_body": "Response body",
+      "failure_headers": "Upstream response headers"
+    },
+    "pagination": {
+      "summary": "Page {{page}} / {{pages}} · {{size}} per page",
+      "prev": "Previous",
+      "next": "Next"
+    }
+  },
+  "auth": {
+    "title": "Management key required",
+    "desc": "The management key could not be resolved automatically (no key saved in the panel, or the dashboard runs cross-origin). Enter it to continue."
+  }
+}

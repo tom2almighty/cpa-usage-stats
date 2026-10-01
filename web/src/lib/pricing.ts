@@ -1,15 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { GroupStat, StoredRecord } from '@/types';
+import type { GroupStat, StoredRecord } from "@/types";
 
 /**
  * Model pricing from models.dev (https://github.com/anomalyco/models.dev)
  * with multi-tier fuzzy matching and user custom price override support.
  */
 
-const PRICING_URL = 'https://models.dev/api.json';
-const CACHE_KEY = 'cpa-usage-stats.pricing.v1';
+const PRICING_URL = "https://models.dev/api.json";
+const CACHE_KEY = "cpa-usage-stats.pricing.v1";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const CUSTOM_PRICING_KEY = 'cpa-usage-stats.custom-pricing.v1';
+const CUSTOM_PRICING_KEY = "cpa-usage-stats.custom-pricing.v1";
 
 /** USD per 1M tokens. */
 export type ModelPrice = {
@@ -33,11 +32,11 @@ export type PriceMatch = {
   providerId: string;
   price: ModelPrice;
   /** Match confidence / origin. */
-  matchType: 'exact' | 'fuzzy' | 'custom';
+  matchType: "exact" | "fuzzy" | "custom";
 };
 
 /** Token buckets used for costing. */
-export type TokenUsage = {
+type TokenUsage = {
   input: number;
   output: number;
   reasoning: number;
@@ -45,7 +44,7 @@ export type TokenUsage = {
   cacheWrite: number;
 };
 
-export type CostBreakdown = {
+type CostBreakdown = {
   uncachedTokens: number;
   uncachedCost: number;
   cacheReadTokens: number;
@@ -60,44 +59,44 @@ export type CostBreakdown = {
   totalCost: number;
 };
 
-type TokenSemantics = 'subset' | 'independent' | 'separateReasoning';
+type TokenSemantics = "subset" | "independent" | "separateReasoning";
 
 const PROVIDER_HINTS: Record<string, string[]> = {
-  claude: ['anthropic'],
-  anthropic: ['anthropic'],
-  codex: ['openai', 'github-copilot'],
-  openai: ['openai'],
-  'openai-compatibility': ['openai'],
-  gemini: ['google'],
-  aistudio: ['google'],
-  antigravity: ['google'],
-  vertex: ['google-vertex', 'google'],
-  interactions: ['google'],
-  xai: ['xai'],
-  meta: ['meta', 'meta-llama'],
-  devin: ['devin', 'cognition'],
+  claude: ["anthropic"],
+  anthropic: ["anthropic"],
+  codex: ["openai", "github-copilot"],
+  openai: ["openai"],
+  "openai-compatibility": ["openai"],
+  gemini: ["google"],
+  aistudio: ["google"],
+  antigravity: ["google"],
+  vertex: ["google-vertex", "google"],
+  interactions: ["google"],
+  xai: ["xai"],
+  meta: ["meta", "meta-llama"],
+  devin: ["devin", "cognition"],
 };
 
 /** Common model shorthand aliases mapping to canonical models.dev IDs. */
 const COMMON_ALIASES: Record<string, string[]> = {
-  '4o': ['gpt-4o'],
-  '4o-mini': ['gpt-4o-mini'],
-  'gpt-4o-mini': ['gpt-4o-mini'],
-  o1: ['o1'],
-  'o1-mini': ['o1-mini'],
-  o3: ['o3'],
-  'o3-mini': ['o3-mini'],
-  sonnet: ['claude-3-7-sonnet', 'claude-3-5-sonnet', 'claude-sonnet-4-5'],
-  haiku: ['claude-3-5-haiku', 'claude-3-haiku'],
-  opus: ['claude-3-opus', 'claude-opus-4-5'],
-  flash: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'],
-  'flash-lite': ['gemini-2.5-flash-lite', 'gemini-2.0-flash-lite'],
-  pro: ['gemini-2.5-pro', 'gemini-1.5-pro'],
-  'deepseek-v3': ['deepseek-chat', 'deepseek-v3'],
-  v3: ['deepseek-chat', 'deepseek-v3'],
-  'deepseek-r1': ['deepseek-reasoner', 'deepseek-r1'],
-  r1: ['deepseek-reasoner', 'deepseek-r1'],
-  grok: ['grok-2', 'grok-3', 'grok-latest'],
+  "4o": ["gpt-4o"],
+  "4o-mini": ["gpt-4o-mini"],
+  "gpt-4o-mini": ["gpt-4o-mini"],
+  o1: ["o1"],
+  "o1-mini": ["o1-mini"],
+  o3: ["o3"],
+  "o3-mini": ["o3-mini"],
+  sonnet: ["claude-3-7-sonnet", "claude-3-5-sonnet", "claude-sonnet-4-5"],
+  haiku: ["claude-3-5-haiku", "claude-3-haiku"],
+  opus: ["claude-3-opus", "claude-opus-4-5"],
+  flash: ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"],
+  "flash-lite": ["gemini-2.5-flash-lite", "gemini-2.0-flash-lite"],
+  pro: ["gemini-2.5-pro", "gemini-1.5-pro"],
+  "deepseek-v3": ["deepseek-chat", "deepseek-v3"],
+  v3: ["deepseek-chat", "deepseek-v3"],
+  "deepseek-r1": ["deepseek-reasoner", "deepseek-r1"],
+  r1: ["deepseek-reasoner", "deepseek-r1"],
+  grok: ["grok-2", "grok-3", "grok-latest"],
 };
 
 type RawCost = {
@@ -112,7 +111,7 @@ type RawModel = { cost?: RawCost; canonical_model_id?: unknown };
 type RawProvider = { models?: Record<string, RawModel> };
 
 function numberOrUndefined(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function toPrice(cost: RawCost | undefined): ModelPrice | null {
@@ -131,12 +130,12 @@ function toPrice(cost: RawCost | undefined): ModelPrice | null {
 
 // ---------- Local Custom Pricing ----------
 
-export function getCustomPrices(): Record<string, ModelPrice> {
+function getCustomPrices(): Record<string, ModelPrice> {
   try {
     const raw = localStorage.getItem(CUSTOM_PRICING_KEY);
     if (!raw) return {};
     const parsed: unknown = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') {
+    if (parsed && typeof parsed === "object") {
       return parsed as Record<string, ModelPrice>;
     }
   } catch {
@@ -152,7 +151,6 @@ export function setCustomPrice(modelName: string, price: ModelPrice): void {
   current[norm] = price;
   try {
     localStorage.setItem(CUSTOM_PRICING_KEY, JSON.stringify(current));
-    window.dispatchEvent(new CustomEvent('cpa-pricing-update'));
   } catch {
     // Storage unavailable
   }
@@ -165,7 +163,6 @@ export function removeCustomPrice(modelName: string): void {
   delete current[norm];
   try {
     localStorage.setItem(CUSTOM_PRICING_KEY, JSON.stringify(current));
-    window.dispatchEvent(new CustomEvent('cpa-pricing-update'));
   } catch {
     // Storage unavailable
   }
@@ -174,9 +171,9 @@ export function removeCustomPrice(modelName: string): void {
 // ---------- models.dev Catalog ----------
 
 /** Reduces the models.dev catalog to the price map the dashboard needs. */
-export function buildPricingTable(catalog: unknown, fetchedAt = Date.now()): PricingTable {
+function buildPricingTable(catalog: unknown, fetchedAt = Date.now()): PricingTable {
   const models: Record<string, Record<string, ModelPrice>> = {};
-  if (!catalog || typeof catalog !== 'object') return { fetchedAt, models };
+  if (!catalog || typeof catalog !== "object") return { fetchedAt, models };
 
   const add = (key: string, providerId: string, price: ModelPrice) => {
     const id = key.trim().toLowerCase();
@@ -191,8 +188,8 @@ export function buildPricingTable(catalog: unknown, fetchedAt = Date.now()): Pri
       if (!price) continue;
       add(modelId, providerId, price);
       const canonical = model?.canonical_model_id;
-      if (typeof canonical === 'string') {
-        const short = canonical.slice(canonical.lastIndexOf('/') + 1);
+      if (typeof canonical === "string") {
+        const short = canonical.slice(canonical.lastIndexOf("/") + 1);
         if (short && short !== modelId) add(short, providerId, price);
       }
     }
@@ -205,9 +202,9 @@ function readCache(): PricingTable | null {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return null;
+    if (!parsed || typeof parsed !== "object") return null;
     const record = parsed as Partial<PricingTable>;
-    if (typeof record.fetchedAt !== 'number' || !record.models) return null;
+    if (typeof record.fetchedAt !== "number" || !record.models) return null;
     return { fetchedAt: record.fetchedAt, models: record.models };
   } catch {
     return null;
@@ -232,12 +229,12 @@ export async function loadPricing(force = false): Promise<PricingTable> {
 
   try {
     const res = await fetch(PRICING_URL, {
-      headers: { Accept: 'application/json' },
+      headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) throw new Error(`models.dev HTTP ${res.status}`);
     const table = buildPricingTable(await res.json());
-    if (Object.keys(table.models).length === 0) throw new Error('models.dev 返回了空的价格表');
+    if (Object.keys(table.models).length === 0) throw new Error("models.dev 返回了空的价格表");
     writeCache(table);
     return table;
   } catch (err) {
@@ -254,7 +251,7 @@ function lookupCandidates(value: string): {
   derived: string[];
   aliases: string[];
 } {
-  const base = value.trim().toLowerCase().replace(/\s+/g, '');
+  const base = value.trim().toLowerCase().replace(/\s+/g, "");
   if (!base) return { exact: [], derived: [], aliases: [] };
 
   const exact = [base];
@@ -263,7 +260,7 @@ function lookupCandidates(value: string): {
     if (candidate && candidate !== base) derivedSet.add(candidate);
   };
 
-  const withoutPrefix = base.includes('/') ? base.slice(base.indexOf('/') + 1) : '';
+  const withoutPrefix = base.includes("/") ? base.slice(base.indexOf("/") + 1) : "";
   if (withoutPrefix) {
     addDerived(withoutPrefix);
   }
@@ -271,14 +268,14 @@ function lookupCandidates(value: string): {
   const baseVariants = [base, withoutPrefix].filter(Boolean);
   for (const v of baseVariants) {
     // Strip date suffixes like -20250929
-    addDerived(v.replace(/[-_.:]?\d{8}$/, ''));
+    addDerived(v.replace(/[-_.:]?\d{8}$/, ""));
     // Strip version tags like -v1, -v1.2
-    addDerived(v.replace(/[-_.:]?v?\d{1,3}(\.\d+)*$/, ''));
+    addDerived(v.replace(/[-_.:]?v?\d{1,3}(\.\d+)*$/, ""));
     // Strip common preview/latest tags
-    addDerived(v.replace(/[-_.]?(latest|preview|beta|exp|experimental|chat|instruct)$/, ''));
+    addDerived(v.replace(/[-_.]?(latest|preview|beta|exp|experimental|chat|instruct)$/, ""));
     // Convert dots to dashes (e.g. 3.5 -> 3-5) and vice versa
-    if (v.includes('.')) addDerived(v.replace(/\./g, '-'));
-    if (v.includes('-')) addDerived(v.replace(/-/g, '.'));
+    if (v.includes(".")) addDerived(v.replace(/\./g, "-"));
+    if (v.includes("-")) addDerived(v.replace(/-/g, "."));
   }
 
   // Common shorthand aliases
@@ -288,7 +285,7 @@ function lookupCandidates(value: string): {
 }
 
 function providerCandidates(provider: string | undefined): string[] {
-  const raw = (provider ?? '').trim().toLowerCase();
+  const raw = (provider ?? "").trim().toLowerCase();
   if (!raw) return [];
   const hints = PROVIDER_HINTS[raw] ?? [];
   return [...new Set([...hints, raw])];
@@ -307,7 +304,7 @@ function pickPrice(
 }
 
 /** Resolves a record/group to an exact, fuzzy, or custom price entry. */
-export function priceFor(
+function priceFor(
   table: PricingTable | null,
   ref: { model?: string; responseModel?: string; alias?: string; provider?: string },
 ): PriceMatch | null {
@@ -315,23 +312,23 @@ export function priceFor(
 
   // 1. Check custom price overrides first
   for (const raw of [ref.responseModel, ref.model, ref.alias]) {
-    const value = (raw ?? '').trim().toLowerCase();
+    const value = (raw ?? "").trim().toLowerCase();
     if (!value) continue;
     if (customPrices[value]) {
       return {
         modelId: value,
-        providerId: 'custom',
+        providerId: "custom",
         price: customPrices[value],
-        matchType: 'custom',
+        matchType: "custom",
       };
     }
-    const clean = value.includes('/') ? value.slice(value.indexOf('/') + 1) : '';
+    const clean = value.includes("/") ? value.slice(value.indexOf("/") + 1) : "";
     if (clean && customPrices[clean]) {
       return {
         modelId: clean,
-        providerId: 'custom',
+        providerId: "custom",
         price: customPrices[clean],
-        matchType: 'custom',
+        matchType: "custom",
       };
     }
   }
@@ -341,7 +338,7 @@ export function priceFor(
 
   // 2. Exact match check
   for (const raw of [ref.responseModel, ref.model, ref.alias]) {
-    const value = (raw ?? '').trim();
+    const value = (raw ?? "").trim();
     if (!value) continue;
     const { exact } = lookupCandidates(value);
     for (const key of exact) {
@@ -353,7 +350,7 @@ export function priceFor(
             modelId: key,
             providerId: picked.providerId,
             price: picked.price,
-            matchType: 'exact',
+            matchType: "exact",
           };
       }
     }
@@ -361,7 +358,7 @@ export function priceFor(
 
   // 3. Derived fuzzy match (punctuation, date/tag stripping)
   for (const raw of [ref.responseModel, ref.model, ref.alias]) {
-    const value = (raw ?? '').trim();
+    const value = (raw ?? "").trim();
     if (!value) continue;
     const { derived } = lookupCandidates(value);
     for (const key of derived) {
@@ -373,7 +370,7 @@ export function priceFor(
             modelId: key,
             providerId: picked.providerId,
             price: picked.price,
-            matchType: 'fuzzy',
+            matchType: "fuzzy",
           };
       }
     }
@@ -381,7 +378,7 @@ export function priceFor(
 
   // 4. Shorthand alias match
   for (const raw of [ref.responseModel, ref.model, ref.alias]) {
-    const value = (raw ?? '').trim();
+    const value = (raw ?? "").trim();
     if (!value) continue;
     const { aliases } = lookupCandidates(value);
     for (const targetId of aliases) {
@@ -393,7 +390,7 @@ export function priceFor(
             modelId: targetId,
             providerId: picked.providerId,
             price: picked.price,
-            matchType: 'fuzzy',
+            matchType: "fuzzy",
           };
       }
     }
@@ -404,30 +401,24 @@ export function priceFor(
 
 // ---------- Cost Calculations ----------
 
-export function tokenSemantics(provider: string | undefined): TokenSemantics {
-  const value = (provider ?? '').trim().toLowerCase();
-  if (value.startsWith('openai-compat') || value.includes('openaicompat')) return 'subset';
-  if (value.includes('claude') || value.includes('anthropic')) return 'independent';
-  for (const marker of ['gemini', 'aistudio', 'antigravity', 'vertex', 'interaction']) {
-    if (value.includes(marker)) return 'separateReasoning';
+function tokenSemantics(provider: string | undefined): TokenSemantics {
+  const value = (provider ?? "").trim().toLowerCase();
+  if (value.startsWith("openai-compat") || value.includes("openaicompat")) return "subset";
+  if (value.includes("claude") || value.includes("anthropic")) return "independent";
+  for (const marker of ["gemini", "aistudio", "antigravity", "vertex", "interaction"]) {
+    if (value.includes(marker)) return "separateReasoning";
   }
-  return 'subset';
+  return "subset";
 }
 
 function perMillion(tokens: number, pricePerMillion: number): number {
   return (tokens / 1_000_000) * pricePerMillion;
 }
 
-export function calculateBreakdown(
-  price: ModelPrice,
-  usage: TokenUsage,
-  semantics: TokenSemantics,
-): CostBreakdown {
-  const cacheInsideInput = semantics !== 'independent';
-  const uncachedTokens = cacheInsideInput
-    ? Math.max(0, usage.input - usage.cacheRead - usage.cacheWrite)
-    : usage.input;
-  const reasoningTokens = semantics === 'separateReasoning' ? usage.reasoning : 0;
+function calculateBreakdown(price: ModelPrice, usage: TokenUsage, semantics: TokenSemantics): CostBreakdown {
+  const cacheInsideInput = semantics !== "independent";
+  const uncachedTokens = cacheInsideInput ? Math.max(0, usage.input - usage.cacheRead - usage.cacheWrite) : usage.input;
+  const reasoningTokens = semantics === "separateReasoning" ? usage.reasoning : 0;
 
   const uncachedCost = perMillion(uncachedTokens, price.input);
   const cacheReadPrice = price.cacheRead ?? price.input;
@@ -495,17 +486,14 @@ export function recordCost(table: PricingTable | null, record: StoredRecord): Re
   return { match, cost: breakdown.totalCost, breakdown };
 }
 
-export type GroupCostResult = {
+type GroupCostResult = {
   match: PriceMatch;
   cost: number;
   breakdown: CostBreakdown;
 };
 
-export function groupCostDetails(
-  table: PricingTable | null,
-  group: GroupStat,
-): GroupCostResult | null {
-  const provider = group.secondary ?? '';
+export function groupCostDetails(table: PricingTable | null, group: GroupStat): GroupCostResult | null {
+  const provider = group.secondary ?? "";
   const match = priceFor(table, { model: group.name, provider });
   if (!match) return null;
   const semantics = tokenSemantics(provider);
@@ -514,12 +502,12 @@ export function groupCostDetails(
   return { match, cost: breakdown.totalCost, breakdown };
 }
 
-export function groupCost(table: PricingTable | null, group: GroupStat): number | null {
+function groupCost(table: PricingTable | null, group: GroupStat): number | null {
   const res = groupCostDetails(table, group);
   return res ? res.cost : null;
 }
 
-export type CostTotal = { cost: number; priced: number; total: number };
+type CostTotal = { cost: number; priced: number; total: number };
 
 /** Sums the cost of every priced group, reporting how many groups matched a price. */
 export function totalCost(table: PricingTable | null, groups: GroupStat[]): CostTotal {
@@ -532,51 +520,4 @@ export function totalCost(table: PricingTable | null, groups: GroupStat[]): Cost
     priced += 1;
   }
   return { cost, priced, total: groups.length };
-}
-
-export type PricingState = {
-  table: PricingTable | null;
-  loading: boolean;
-  error: string;
-  refresh: () => void;
-};
-
-/** Loads the price table for the dashboard and exposes a manual refresh. */
-export function usePricing(): PricingState {
-  const [table, setTable] = useState<PricingTable | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [nonce, setNonce] = useState(0);
-
-  useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    loadPricing(nonce > 0)
-      .then((next) => {
-        if (!alive) return;
-        setTable(next);
-        setError('');
-      })
-      .catch((err: unknown) => {
-        if (!alive) return;
-        setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [nonce]);
-
-  // Re-run matching whenever custom prices are modified in localStorage
-  useEffect(() => {
-    const onCustomUpdate = () => setNonce((n) => n + 1);
-    window.addEventListener('cpa-pricing-update', onCustomUpdate);
-    return () => window.removeEventListener('cpa-pricing-update', onCustomUpdate);
-  }, []);
-
-  const refresh = useCallback(() => setNonce((n) => n + 1), []);
-
-  return { table, loading, error, refresh };
 }

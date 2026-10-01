@@ -24,7 +24,7 @@ CLIProxyAPI（CPA）用量持久化与统计看板插件（v8 版）。
 ### 前置要求
 
 - Go 1.25+（需启用 CGO，系统装有 GCC 或 Clang）
-- Bun 1.2+
+- Bun 1.4+（前端用 Tailwind CSS v4 + shadcn CLI，需要较新的 Bun）
 
 ### 本地编译
 
@@ -34,6 +34,8 @@ CLIProxyAPI（CPA）用量持久化与统计看板插件（v8 版）。
 ```
 
 编译产物为 `cpa-usage-stats.so`（Linux）或 `cpa-usage-stats.dylib`（macOS）。
+
+只调前端时可单独起 Vite 开发服务器（`cd web && bun run dev`）。资源页默认同源调用插件接口，本地开发时用 `?api_base=http://127.0.0.1:8317` 指定正在运行的 CLIProxyAPI 地址即可。
 
 ### 打包发布资产
 
@@ -95,19 +97,21 @@ http://127.0.0.1:8317/v0/resource/plugins/cpa-usage-stats/dashboard
 
 看板页面通过插件自己的管理接口（需要管理密钥）读取统计数据。密钥按以下顺序解析，命中即用：
 
-1. 看板自己保存的密钥：在弹出的输入框中填写后写入 `localStorage`（键名 `cpa-usage-stats.management-key`）；
+1. 看板自己保存的密钥：在「管理密钥」弹窗中填写后写入 `localStorage`（键名 `cpa-usage-stats.management-key`）；
 2. cpa-dashboard 面板保存的密钥：`sessionStorage` / `localStorage` 的 `cpa-dashboard.management-key`（面板与资源页同源时可直接复用）；
 3. 官方管理中心保存的密钥：`localStorage` 的 `cli-proxy-auth`（需在管理中心勾选「记住密码」）。
 
-读取不到密钥时页面只显示输入框，**不会发送任何请求**；密钥错误时先发一个探测请求，失败即停并重新弹出输入框，重新输入才会再次尝试。
+解析不到密钥时看板仍会渲染界面，但**不会发送任何请求**，只提示需要密钥；点击右上角「管理密钥」可随时输入或覆盖密钥，弹窗内也可清除本地保存的密钥。密钥无效时页面顶部提示重新输入，输入后才会再次请求。
 
 > 注意：CLIProxyAPI 对同一客户端 IP 连续 5 次认证失败会临时封禁约 30 分钟。看板因此不在缺少密钥时发请求，也请在确认密钥无误后再点击「连接」。
 
 ### 5. 看板功能
 
-- **用量总览**：请求量 / 成功率、Token 总量、输入输出与缓存读写分列、平均延迟 / TTFT、**预估成本**五组指标卡；按小时（今日 / 昨天）或按天（7 天 / 30 天 / 全部）的双轴趋势图（请求数 + Tokens）；Provider 分布环形图；模型用量排行（含失败数、Token 占比、**单价与预估成本**）；客户端 Key 用量表。
+- **用量总览**：请求量 / 成功率、Token 总量、输入输出与缓存读写分列、平均延迟 / TTFT、**预估成本**五组指标卡；按小时（今日 / 昨天）或按天（7 天 / 30 天 / 全部）的双轴趋势图（成功 / 失败请求堆叠柱 + 输入 / 输出 Tokens 堆叠面积）；Provider 分布环形图；模型用量排行（含失败数、Token 占比、**单价与预估成本**、可点击设置自定义价格）；客户端 Key 用量表。
 - **调用明细**：关键词（Key / 模型 / Request / Trace / Session / 错误信息）与模型、Provider、Key、状态多维筛选，分页浏览；展开单条记录查看 Request ID、Trace ID、Session ID、认证信息、上游 Base URL、推理力度、Service Tier（请求 → 响应）、流式 / 生成标记、完整 Token 分解、**匹配到的模型价格与单条预估成本**、失败响应详情。
-- 时间范围切换、自动刷新（10s / 30s / 60s）、深浅主题。
+- 时间范围切换、自动刷新（10s / 30s / 60s）、中英双语、深浅主题（含跟随系统）。
+
+看板前端与 cpa-dashboard 面板保持同一套技术选型与设计体系：React 19 + TypeScript + Vite + Tailwind CSS v4，组件由 shadcn CLI（`base-nova` 风格，Base UI 底层）生成，图表用 shadcn chart（Recharts）配合 `--chart-*` 主题变量，主题 Token 与面板完全一致，因此嵌入管理中心时配色与面板协调。文案走 i18next（默认中文，可切英文），语言选择存 `localStorage` 的 `cpa-usage-stats.language`。
 
 ### 6. 模型价格与成本估算
 

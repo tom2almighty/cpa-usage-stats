@@ -45,9 +45,22 @@ func Handle(store *storage.Storage, html []byte, req model.ManagementRequest) mo
 			return jsonError(http.StatusInternalServerError, "query_options_failed", err.Error())
 		}
 		return jsonOK(options)
+	case "/stats":
+		// Runtime counters that live outside the database (dropped records,
+		// queue pressure) so the dashboard can flag silent data loss.
+		return jsonOK(statsProvider())
 	default:
 		return jsonError(http.StatusNotFound, "not_found", "unknown endpoint")
 	}
+}
+
+// statsProvider is swapped in by the plugin so /stats can report worker
+// counters without the handler importing the worker package.
+var statsProvider = func() model.RuntimeStats { return model.RuntimeStats{} }
+
+// SetStatsProvider installs the runtime counter source for /stats.
+func SetStatsProvider(provider func() model.RuntimeStats) {
+	statsProvider = provider
 }
 
 func htmlResponse(body []byte) model.ManagementResponse {
@@ -71,6 +84,8 @@ func parseFilter(q map[string][]string) (model.UsageFilter, bool) {
 		Model:    get("model"),
 		Provider: get("provider"),
 		APIKey:   get("api_key"),
+		AuthID:   get("auth_id"),
+		Session:  get("session_id"),
 		Keyword:  get("keyword"),
 	}
 	filter.Page, _ = strconv.Atoi(get("page"))

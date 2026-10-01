@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -226,6 +227,7 @@ func TestV8FieldsRoundTrip(t *testing.T) {
 		t.Errorf("v8 fields round trip mismatch: %+v", got)
 	}
 }
+
 // TestFailureHeadersSaved verifies response headers are only saved on failed requests,
 // filtered for sensitive headers, and retrieved properly.
 func TestFailureHeadersSaved(t *testing.T) {
@@ -295,5 +297,183 @@ func TestFailureHeadersSaved(t *testing.T) {
 				t.Errorf("expected X-Request-Id trace-xyz, got %v", item.ResponseHeaders["X-Request-Id"])
 			}
 		}
+	}
+}
+
+// TestErrorTypeExtraction covers the upstream error shapes the dashboard
+// groups by: nested under "error" (OpenAI/Anthropic), flat (Google/Azure),
+// and bodies that carry no identifier at all.
+func TestErrorTypeExtraction(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"openai nested", `{"error":{"message":"rate limited","type":"rate_limit_error"}}`, "rate_limit_error"},
+		{"anthropic nested code", `{"error":{"type":"api_error","code":"overloaded"}}`, "api_error"},
+		{"flat type", `{"type":"invalid_request_error","message":"bad"}`, "invalid_request_error"},
+		{"flat code", `{"code":"RESOURCE_EXHAUSTED"}`, "RESOURCE_EXHAUSTED"},
+		{"non json", `<html>502 Bad Gateway</html>`, ""},
+		{"empty", ``, ""},
+		{"json without identifier", `{"message":"nope"}`, ""},
+		{"numeric code is not an identifier", `{"code":429}`, ""},
+	}
+	for _, tc := range cases {
+		if got := extractErrorType(tc.body); got != tc.want {
+			t.Errorf("%s: extractErrorType(%q) = %q, want %q", tc.name, tc.body, got, tc.want)
+		}
+	}
+}
+
+// TestSummaryDerivedMetrics verifies percentiles, cache hit rate, streaming
+// throughput and the new auth/session/failure groupings.
+func TestSummaryDerivedMetrics(t *testing.T) {
+	store, err := New(filepath.Join(t.TempDir(), "usage.db"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Now()
+	latencies := []time.Duration{100, 200, 300, 400, 500}
+	records := make([]model.UsageRecord, 0, len(latencies))
+	for i, latency := range latencies {
+		records = append(records, model.UsageRecord{
+			RequestID:   fmt.Sprintf("req-%d", i),
+			Provider:    "openai",
+			Model:       "gpt-5",
+			SessionID:   "sess-shared",
+			AuthID:      "auth-A",
+			AuthIndex:   "0",
+			AuthType:    "oauth",
+			RequestedAt: now,
+			Latency:     latency * time.Millisecond,
+			TTFT:        50 * time.Millisecond,
+			Stream:      true,
+			Detail: model.UsageDetail{
+				InputTokens:     100,
+				OutputTokens:    200,
+				CacheReadTokens: 300,
+				TotalTokens:     600,
+			},
+		})
+	}
+	// One failure with a parseable error type.
+	records = append(records, model.UsageRecord{
+		RequestID:   "req-fail",
+		Provider:    "openai",
+		Model:       "gpt-5",
+		SessionID:   "sess-shared",
+		AuthID:      "auth-B",
+		AuthIndex:   "1",
+		AuthType:    "oauth",
+		RequestedAt: now,
+		Latency:     10 * time.Second,
+		Failed:      true,
+		Failure:     model.UsageFailure{StatusCode: 429, Body: `{"error":{"type":"rate_limit_error"}}`},
+		Detail:      model.UsageDetail{TotalTokens: 0},
+	})
+	if err := store.InsertBatch(records); err != nil {
+		t.Fatalf("InsertBatch: %v", err)
+	}
+
+	start := now.Add(-time.Hour)
+	summary, err := store.GetSummary(model.UsageFilter{StartTime: &start}, true)
+	if err != nil {
+		t.Fatalf("GetSummary: %v", err)
+	}
+
+	if summary.P50LatencyMs != 300 {
+		t.Errorf("p50 = %v, want 300", summary.P50LatencyMs)
+	}
+	if summary.P95LatencyMs != 10000 {
+		t.Errorf("p95 = %v, want 10000 (the slow failure)", summary.P95LatencyMs)
+	}
+	if summary.P99LatencyMs != 10000 {
+		t.Errorf("p99 = %v, want 10000", summary.P99LatencyMs)
+	}
+	// cache_read / (input + cache_read) = 1500 / (500 + 1500) = 75%
+	if summary.CacheHitRate != 75 {
+		t.Errorf("cache hit rate = %v, want 75", summary.CacheHitRate)
+	}
+	if summary.StreamRequests != 5 {
+		t.Errorf("stream requests = %d, want 5", summary.StreamRequests)
+	}
+	// 200 output tokens over (latency - ttft): 100ms,200ms,...  -> avg 2000 t/s
+	if summary.AvgOutputTps <= 0 {
+		t.Errorf("avg output tps = %v, want > 0", summary.AvgOutputTps)
+	}
+
+	if len(summary.Auths) != 2 {
+		t.Fatalf("auth groups = %d, want 2", len(summary.Auths))
+	}
+	var authA model.GroupStat
+	for _, a := range summary.Auths {
+		if a.Secondary == "0" {
+			authA = a
+		}
+	}
+	if authA.Name != "auth-A · oauth" {
+		t.Errorf("auth name = %q, want %q", authA.Name, "auth-A · oauth")
+	}
+	if authA.Requests != 5 || authA.Failed != 0 {
+		t.Errorf("auth-A = %d requests / %d failed, want 5/0", authA.Requests, authA.Failed)
+	}
+
+	if len(summary.Sessions) != 1 || summary.Sessions[0].Name != "sess-shared" || summary.Sessions[0].Requests != 6 {
+		t.Errorf("session groups = %+v, want one sess-shared with 6 requests", summary.Sessions)
+	}
+
+	if len(summary.Failures) != 1 {
+		t.Fatalf("failure groups = %+v, want 1", summary.Failures)
+	}
+	if summary.Failures[0].StatusCode != 429 || summary.Failures[0].ErrorType != "rate_limit_error" || summary.Failures[0].Requests != 1 {
+		t.Errorf("failure stat = %+v", summary.Failures[0])
+	}
+	if summary.Failures[0].Sample == "" {
+		t.Errorf("failure stat should carry a body sample")
+	}
+
+	// Trend points must carry the extended token split and latency stats.
+	if len(summary.Trend) == 0 {
+		t.Fatal("trend is empty")
+	}
+	point := summary.Trend[0]
+	if point.CacheReadTokens != 1500 || point.AvgLatencyMs <= 0 || point.P95LatencyMs <= 0 {
+		t.Errorf("trend point = %+v, want cache read 1500 and latency stats", point)
+	}
+}
+
+// TestRecordsFilterByAuthAndSession covers the new exact-match filters.
+func TestRecordsFilterByAuthAndSession(t *testing.T) {
+	store, err := New(filepath.Join(t.TempDir(), "usage.db"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Now()
+	if err := store.InsertBatch([]model.UsageRecord{
+		{RequestID: "a", AuthID: "auth-A", SessionID: "sess-1", RequestedAt: now},
+		{RequestID: "b", AuthID: "auth-B", SessionID: "sess-1", RequestedAt: now},
+		{RequestID: "c", AuthID: "auth-B", SessionID: "sess-2", RequestedAt: now},
+	}); err != nil {
+		t.Fatalf("InsertBatch: %v", err)
+	}
+
+	byAuth, err := store.GetRecords(model.UsageFilter{AuthID: "auth-B"})
+	if err != nil {
+		t.Fatalf("GetRecords(auth): %v", err)
+	}
+	if byAuth.Total != 2 {
+		t.Errorf("auth filter total = %d, want 2", byAuth.Total)
+	}
+
+	bySession, err := store.GetRecords(model.UsageFilter{Session: "sess-1"})
+	if err != nil {
+		t.Fatalf("GetRecords(session): %v", err)
+	}
+	if bySession.Total != 2 {
+		t.Errorf("session filter total = %d, want 2", bySession.Total)
 	}
 }

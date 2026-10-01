@@ -71,39 +71,42 @@ type UsageDetail struct {
 // StoredRecord represents a record stored in SQLite and returned by the
 // records endpoint.
 type StoredRecord struct {
-	ID                  int64     `json:"id"`
-	RequestID           string    `json:"request_id"`
-	TraceID             string    `json:"trace_id"`
-	SessionID           string    `json:"session_id"`
-	Provider            string    `json:"provider"`
-	BaseURL             string    `json:"base_url"`
-	Model               string    `json:"model"`
-	ResponseModel       string    `json:"response_model"`
-	Alias               string    `json:"alias"`
-	APIKey              string    `json:"api_key"`
-	AuthID              string    `json:"auth_id"`
-	AuthIndex           string    `json:"auth_index"`
-	AuthType            string    `json:"auth_type"`
-	Source              string    `json:"source"`
-	ReasoningEffort     string    `json:"reasoning_effort"`
-	ServiceTier         string    `json:"service_tier"`
-	ResponseServiceTier string    `json:"response_service_tier"`
-	Stream              bool      `json:"stream"`
-	Generate            bool      `json:"generate"`
-	RequestedAt         time.Time `json:"requested_at"`
-	LatencyMs           int64     `json:"latency_ms"`
-	TTFTMs              int64     `json:"ttft_ms"`
-	Failed              bool      `json:"failed"`
+	ID                  int64               `json:"id"`
+	RequestID           string              `json:"request_id"`
+	TraceID             string              `json:"trace_id"`
+	SessionID           string              `json:"session_id"`
+	ParentSessionID     string              `json:"parent_session_id"`
+	Provider            string              `json:"provider"`
+	BaseURL             string              `json:"base_url"`
+	ExecutorType        string              `json:"executor_type"`
+	Model               string              `json:"model"`
+	ResponseModel       string              `json:"response_model"`
+	Alias               string              `json:"alias"`
+	APIKey              string              `json:"api_key"`
+	AuthID              string              `json:"auth_id"`
+	AuthIndex           string              `json:"auth_index"`
+	AuthType            string              `json:"auth_type"`
+	Source              string              `json:"source"`
+	ReasoningEffort     string              `json:"reasoning_effort"`
+	ServiceTier         string              `json:"service_tier"`
+	ResponseServiceTier string              `json:"response_service_tier"`
+	Stream              bool                `json:"stream"`
+	Generate            bool                `json:"generate"`
+	RequestedAt         time.Time           `json:"requested_at"`
+	LatencyMs           int64               `json:"latency_ms"`
+	TTFTMs              int64               `json:"ttft_ms"`
+	Failed              bool                `json:"failed"`
 	StatusCode          int                 `json:"status_code"`
+	ErrorType           string              `json:"error_type,omitempty"`
 	FailureBody         string              `json:"failure_body,omitempty"`
 	ResponseHeaders     map[string][]string `json:"response_headers,omitempty"`
 	InputTokens         int64               `json:"input_tokens"`
-	OutputTokens        int64     `json:"output_tokens"`
-	ReasoningTokens     int64     `json:"reasoning_tokens"`
-	CachedTokens        int64     `json:"cached_tokens"`
-	CacheReadTokens     int64     `json:"cache_read_tokens"`
-	CacheCreationTokens int64     `json:"cache_creation_tokens"`
-	TotalTokens         int64     `json:"total_tokens"`
+	OutputTokens        int64               `json:"output_tokens"`
+	ReasoningTokens     int64               `json:"reasoning_tokens"`
+	CachedTokens        int64               `json:"cached_tokens"`
+	CacheReadTokens     int64               `json:"cache_read_tokens"`
+	CacheCreationTokens int64               `json:"cache_creation_tokens"`
+	TotalTokens         int64               `json:"total_tokens"`
 }
 
 // ManagementRequest describes an incoming HTTP request via management API.
@@ -149,32 +152,67 @@ type UsageFilter struct {
 	Model     string
 	Provider  string
 	APIKey    string
+	AuthID    string
+	Session   string
 	Failed    *bool
 	Keyword   string
 	Page      int
 	PageSize  int
 }
 
+// RuntimeStats carries counters that live outside the database.
+type RuntimeStats struct {
+	// DroppedRecords counts usage records discarded because the in-memory
+	// queue was full. Non-zero means the dashboard is under-reporting.
+	DroppedRecords int64 `json:"dropped_records"`
+	// QueueDepth and QueueCapacity expose current buffer pressure.
+	QueueDepth    int `json:"queue_depth"`
+	QueueCapacity int `json:"queue_capacity"`
+}
+
 // SummaryResponse represents aggregated statistics for a time range.
 type SummaryResponse struct {
-	TotalRequests       int64        `json:"total_requests"`
-	SuccessRequests     int64        `json:"success_requests"`
-	FailedRequests      int64        `json:"failed_requests"`
-	SuccessRate         float64      `json:"success_rate"`
-	TotalTokens         int64        `json:"total_tokens"`
-	InputTokens         int64        `json:"input_tokens"`
-	OutputTokens        int64        `json:"output_tokens"`
-	ReasoningTokens     int64        `json:"reasoning_tokens"`
-	CachedTokens        int64        `json:"cached_tokens"`
-	CacheReadTokens     int64        `json:"cache_read_tokens"`
-	CacheCreationTokens int64        `json:"cache_creation_tokens"`
-	AvgLatencyMs        float64      `json:"avg_latency_ms"`
-	AvgTTFTMs           float64      `json:"avg_ttft_ms"`
-	Models              []GroupStat  `json:"model_stats"`
-	Providers           []GroupStat  `json:"provider_stats"`
-	APIKeys             []GroupStat  `json:"api_key_stats"`
-	Bucket              string       `json:"bucket"`
-	Trend               []TrendPoint `json:"trend"`
+	TotalRequests       int64   `json:"total_requests"`
+	SuccessRequests     int64   `json:"success_requests"`
+	FailedRequests      int64   `json:"failed_requests"`
+	SuccessRate         float64 `json:"success_rate"`
+	TotalTokens         int64   `json:"total_tokens"`
+	InputTokens         int64   `json:"input_tokens"`
+	OutputTokens        int64   `json:"output_tokens"`
+	ReasoningTokens     int64   `json:"reasoning_tokens"`
+	CachedTokens        int64   `json:"cached_tokens"`
+	CacheReadTokens     int64   `json:"cache_read_tokens"`
+	CacheCreationTokens int64   `json:"cache_creation_tokens"`
+	// CacheHitRate is the share of prompt tokens served from cache:
+	// cache_read / (input + cache_read).
+	CacheHitRate   float64 `json:"cache_hit_rate"`
+	AvgLatencyMs   float64 `json:"avg_latency_ms"`
+	AvgTTFTMs      float64 `json:"avg_ttft_ms"`
+	P50LatencyMs   float64 `json:"p50_latency_ms"`
+	P95LatencyMs   float64 `json:"p95_latency_ms"`
+	P99LatencyMs   float64 `json:"p99_latency_ms"`
+	AvgOutputTps   float64 `json:"avg_output_tps"`
+	StreamRequests int64   `json:"stream_requests"`
+	// DroppedRecords counts usage records discarded because the in-memory
+	// queue was full; it makes silent data loss visible on the dashboard.
+	DroppedRecords int64         `json:"dropped_records"`
+	Models         []GroupStat   `json:"model_stats"`
+	Providers      []GroupStat   `json:"provider_stats"`
+	APIKeys        []GroupStat   `json:"api_key_stats"`
+	Auths          []GroupStat   `json:"auth_stats"`
+	Sessions       []GroupStat   `json:"session_stats"`
+	Failures       []FailureStat `json:"failure_stats"`
+	Bucket         string        `json:"bucket"`
+	Trend          []TrendPoint  `json:"trend"`
+}
+
+// FailureStat aggregates failed requests by upstream status and error type.
+type FailureStat struct {
+	StatusCode int    `json:"status_code"`
+	ErrorType  string `json:"error_type,omitempty"`
+	Requests   int64  `json:"requests"`
+	// Sample is a truncated upstream response body for context.
+	Sample string `json:"sample,omitempty"`
 }
 
 // GroupStat aggregates usage by one dimension. Secondary carries the provider
@@ -192,16 +230,23 @@ type GroupStat struct {
 	CacheReadTokens     int64   `json:"cache_read_tokens"`
 	CacheCreationTokens int64   `json:"cache_creation_tokens"`
 	AvgLatencyMs        float64 `json:"avg_latency_ms"`
+	P95LatencyMs        float64 `json:"p95_latency_ms"`
+	AvgTtftMs           float64 `json:"avg_ttft_ms"`
+	StreamRequests      int64   `json:"stream_requests"`
 }
 
 // TrendPoint is one hour ("2006-01-02 15") or day ("2006-01-02") bucket.
 type TrendPoint struct {
-	Bucket       string `json:"bucket"`
-	Requests     int64  `json:"requests"`
-	Failed       int64  `json:"failed"`
-	Tokens       int64  `json:"tokens"`
-	InputTokens  int64  `json:"input_tokens"`
-	OutputTokens int64  `json:"output_tokens"`
+	Bucket          string  `json:"bucket"`
+	Requests        int64   `json:"requests"`
+	Failed          int64   `json:"failed"`
+	Tokens          int64   `json:"tokens"`
+	InputTokens     int64   `json:"input_tokens"`
+	OutputTokens    int64   `json:"output_tokens"`
+	CacheReadTokens int64   `json:"cache_read_tokens"`
+	ReasoningTokens int64   `json:"reasoning_tokens"`
+	AvgLatencyMs    float64 `json:"avg_latency_ms"`
+	P95LatencyMs    float64 `json:"p95_latency_ms"`
 }
 
 // RecordListResponse represents paginated records response.
@@ -217,4 +262,5 @@ type OptionsResponse struct {
 	Models    []string `json:"models"`
 	Providers []string `json:"providers"`
 	APIKeys   []string `json:"api_keys"`
+	Auths     []string `json:"auths"`
 }

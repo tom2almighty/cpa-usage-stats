@@ -64,6 +64,20 @@ func (w *Worker) DroppedCount() int64 {
 	return w.dropped.Load()
 }
 
+// QueueDepth returns the number of records currently waiting to be flushed.
+func (w *Worker) QueueDepth() int {
+	return len(w.queue)
+}
+
+// Stats reports runtime counters for the dashboard.
+func (w *Worker) Stats() model.RuntimeStats {
+	return model.RuntimeStats{
+		DroppedRecords: w.dropped.Load(),
+		QueueDepth:     len(w.queue),
+		QueueCapacity:  cap(w.queue),
+	}
+}
+
 func (w *Worker) run() {
 	defer w.wg.Done()
 

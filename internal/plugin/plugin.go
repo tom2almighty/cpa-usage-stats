@@ -39,6 +39,20 @@ var (
 func GetInstance() *Instance {
 	once.Do(func() {
 		pluginInstance = &Instance{}
+		// The handler cannot import the worker package (it would cycle through
+		// storage), so the counter source is injected here.
+		handler.SetStatsProvider(func() model.RuntimeStats {
+			p := pluginInstance
+			if p == nil {
+				return model.RuntimeStats{}
+			}
+			p.mu.RLock()
+			defer p.mu.RUnlock()
+			if p.worker == nil {
+				return model.RuntimeStats{}
+			}
+			return p.worker.Stats()
+		})
 	})
 	return pluginInstance
 }
@@ -206,6 +220,7 @@ func (p *Instance) handleManagementRegister() ([]byte, error) {
 			{Method: http.MethodGet, Path: handler.APIBasePath + "/summary", Description: "用量聚合统计"},
 			{Method: http.MethodGet, Path: handler.APIBasePath + "/records", Description: "调用明细分页"},
 			{Method: http.MethodGet, Path: handler.APIBasePath + "/options", Description: "筛选下拉选项"},
+			{Method: http.MethodGet, Path: handler.APIBasePath + "/stats", Description: "运行时计数（丢弃记录、队列压力）"},
 		},
 	})
 }

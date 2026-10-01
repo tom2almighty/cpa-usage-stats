@@ -16,13 +16,60 @@ import (
 
 const (
 	timeLayout = "2006-01-02 15:04:05.000"
-	// schemaVersion gates table layout: 3 adds response_headers for failed records.
-	schemaVersion = 3
+	// schemaVersion gates table layout. Bump it whenever the table changes:
+	// older layouts are dropped and rebuilt (no data migration is supported).
+	schemaVersion = 4
 	// Upstream error pages can be large HTML documents; keep enough to debug.
 	maxFailureBody = 4 << 10
 	// Response headers for failed requests; filtered and capped to avoid database bloat.
 	maxFailureHeaders = 2 << 10
+	// Extracted error type strings are short identifiers (rate_limit_error).
+	maxErrorType = 64
 )
+
+// errorTypeKeys are the JSON paths upstream APIs use for a machine-readable
+// error identifier, in priority order.
+var errorTypeKeys = []string{"$.error.type", "$.error.code", "$.type", "$.code"}
+
+// extractErrorType pulls a short machine-readable error identifier out of an
+// upstream failure body. Upstream error shapes vary (OpenAI/Anthropic nest it
+// under "error", Google/Azure keep it flat), so several paths are probed.
+// It returns "" when the body is not a JSON object or carries no identifier.
+func extractErrorType(body string) string {
+	trimmed := strings.TrimSpace(body)
+	if !strings.HasPrefix(trimmed, "{") {
+		return ""
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+		return ""
+	}
+	for _, path := range errorTypeKeys {
+		value, ok := resolveString(parsed, strings.Split(strings.TrimPrefix(path, "$."), "."))
+		if !ok || value == "" {
+			continue
+		}
+		return value[:min(len(value), maxErrorType)]
+	}
+	return ""
+}
+
+// resolveString walks a parsed JSON object along path segments.
+func resolveString(current any, segments []string) (string, bool) {
+	for _, segment := range segments {
+		object, ok := current.(map[string]any)
+		if !ok {
+			return "", false
+		}
+		current, ok = object[segment]
+		if !ok {
+			return "", false
+		}
+	}
+	value, ok := current.(string)
+	return strings.TrimSpace(value), ok
+}
+
 func serializeFailureHeaders(failed bool, headers http.Header) string {
 	if !failed || len(headers) == 0 {
 		return ""
@@ -51,7 +98,6 @@ func serializeFailureHeaders(failed bool, headers http.Header) string {
 	}
 	return string(b)
 }
-
 
 // Storage handles SQLite persistent storage.
 type Storage struct {
@@ -98,24 +144,13 @@ func (s *Storage) initSchema() error {
 	if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return fmt.Errorf("read user_version: %w", err)
 	}
-	if version >= schemaVersion {
+	if version == schemaVersion {
 		return nil
 	}
 
-	// Schema v2 to v3 migration: add response_headers column without dropping data
-	if version == 2 {
-		migration := fmt.Sprintf(`
-			ALTER TABLE usage_records ADD COLUMN response_headers TEXT;
-			PRAGMA user_version = %d;
-		`, schemaVersion)
-		if _, err := s.db.Exec(migration); err != nil {
-			return fmt.Errorf("migrate v2 to v3: %w", err)
-		}
-		return nil
-	}
-
-	// Legacy layouts (user_version 0 covers both fresh databases and the old
-	// pre-v8 table) are dropped and rebuilt; old data is intentionally discarded.
+	// Any other layout (fresh database, a pre-v8 table, or an older plugin
+	// version) is dropped and rebuilt: statistics are derived data, so a clean
+	// rebuild beats carrying migration code for layouts nobody runs any more.
 	schema := `
 	DROP TABLE IF EXISTS usage_records;
 
@@ -124,8 +159,10 @@ func (s *Storage) initSchema() error {
 		request_id TEXT NOT NULL,
 		trace_id TEXT,
 		session_id TEXT,
+		parent_session_id TEXT,
 		provider TEXT,
 		base_url TEXT,
+		executor_type TEXT,
 		model TEXT,
 		response_model TEXT,
 		alias TEXT,
@@ -144,6 +181,7 @@ func (s *Storage) initSchema() error {
 		ttft_ms INTEGER NOT NULL DEFAULT 0,
 		failed INTEGER NOT NULL DEFAULT 0,
 		status_code INTEGER NOT NULL DEFAULT 0,
+		error_type TEXT,
 		failure_body TEXT,
 		response_headers TEXT,
 		input_tokens INTEGER NOT NULL DEFAULT 0,
@@ -155,12 +193,15 @@ func (s *Storage) initSchema() error {
 		total_tokens INTEGER NOT NULL DEFAULT 0
 	);
 
-	CREATE INDEX idx_usage_requested_at ON usage_records(requested_at);
-	CREATE INDEX idx_usage_model ON usage_records(model);
-	CREATE INDEX idx_usage_provider ON usage_records(provider);
-	CREATE INDEX idx_usage_api_key ON usage_records(api_key);
+	-- requested_at leads every range query; the composite covers the common
+	-- "recent failures" and "group by model within a range" access patterns.
+	CREATE INDEX idx_usage_requested_at ON usage_records(requested_at DESC);
+	CREATE INDEX idx_usage_model ON usage_records(model, requested_at);
+	CREATE INDEX idx_usage_provider ON usage_records(provider, requested_at);
+	CREATE INDEX idx_usage_api_key ON usage_records(api_key, requested_at);
 	CREATE INDEX idx_usage_session ON usage_records(session_id);
-	CREATE INDEX idx_usage_failed ON usage_records(failed);
+	CREATE INDEX idx_usage_auth ON usage_records(auth_id, auth_index);
+	CREATE INDEX idx_usage_failed ON usage_records(failed, status_code) WHERE failed = 1;
 
 	PRAGMA user_version = ` + fmt.Sprint(schemaVersion) + `;
 	`
@@ -187,15 +228,15 @@ func (s *Storage) InsertBatch(records []model.UsageRecord) error {
 
 	stmt, err := tx.Prepare(`
 		INSERT INTO usage_records (
-			request_id, trace_id, session_id, provider, base_url,
-			model, response_model, alias, api_key,
+			request_id, trace_id, session_id, parent_session_id, provider, base_url,
+			executor_type, model, response_model, alias, api_key,
 			auth_id, auth_index, auth_type, source,
 			reasoning_effort, service_tier, response_service_tier,
 			stream, generate, requested_at, latency_ms, ttft_ms,
-			failed, status_code, failure_body, response_headers,
+			failed, status_code, error_type, failure_body, response_headers,
 			input_tokens, output_tokens, reasoning_tokens,
 			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare insert: %w", err)
@@ -211,13 +252,21 @@ func (s *Storage) InsertBatch(records []model.UsageRecord) error {
 		if len(failureBody) > maxFailureBody {
 			failureBody = strings.ToValidUTF8(failureBody[:maxFailureBody], "")
 		}
+		// The error identifier is extracted at write time so failure grouping
+		// stays a plain indexed GROUP BY instead of a JSON scan per query.
+		errorType := ""
+		if r.Failed {
+			errorType = extractErrorType(failureBody)
+		}
 
 		_, err := stmt.Exec(
 			r.RequestID,
 			r.TraceID,
 			r.SessionID,
+			r.ParentSessionID,
 			r.Provider,
 			r.BaseURL,
+			r.ExecutorType,
 			r.Model,
 			r.ResponseModel,
 			r.Alias,
@@ -238,6 +287,7 @@ func (s *Storage) InsertBatch(records []model.UsageRecord) error {
 			r.TTFT.Milliseconds(),
 			r.Failed,
 			r.Failure.StatusCode,
+			errorType,
 			failureBody,
 			serializeFailureHeaders(r.Failed, r.ResponseHeaders),
 			r.Detail.InputTokens,
@@ -280,6 +330,14 @@ func buildWhere(filter model.UsageFilter) (string, []interface{}) {
 		clauses = append(clauses, "api_key = ?")
 		args = append(args, filter.APIKey)
 	}
+	if filter.AuthID != "" {
+		clauses = append(clauses, "auth_id = ?")
+		args = append(args, filter.AuthID)
+	}
+	if filter.Session != "" {
+		clauses = append(clauses, "session_id = ?")
+		args = append(args, filter.Session)
+	}
 	if filter.Failed != nil {
 		if *filter.Failed {
 			clauses = append(clauses, "failed = 1")
@@ -309,6 +367,9 @@ func (s *Storage) GetSummary(filter model.UsageFilter, hourly bool) (*model.Summ
 	where, args := buildWhere(filter)
 
 	resp := &model.SummaryResponse{Bucket: "day"}
+	// Latency percentiles come from the same single pass: CUME_DIST gives each
+	// row its cumulative share, so the first row reaching the target share is
+	// the nearest-rank percentile (PERCENT_RANK would return the row below it).
 	err := s.db.QueryRow(fmt.Sprintf(`
 		SELECT
 			COUNT(*),
@@ -321,8 +382,16 @@ func (s *Storage) GetSummary(filter model.UsageFilter, hourly bool) (*model.Summ
 			COALESCE(SUM(cache_read_tokens), 0),
 			COALESCE(SUM(cache_creation_tokens), 0),
 			COALESCE(AVG(latency_ms), 0),
-			COALESCE(AVG(CASE WHEN stream = 1 AND ttft_ms > 0 THEN ttft_ms END), 0)
-		FROM usage_records %s
+			COALESCE(AVG(CASE WHEN stream = 1 AND ttft_ms > 0 THEN ttft_ms END), 0),
+			COALESCE(MIN(CASE WHEN pct >= 0.5 THEN latency_ms END), 0),
+			COALESCE(MIN(CASE WHEN pct >= 0.95 THEN latency_ms END), 0),
+			COALESCE(MIN(CASE WHEN pct >= 0.99 THEN latency_ms END), 0),
+			COALESCE(SUM(CASE WHEN stream = 1 THEN 1 ELSE 0 END), 0),
+			COALESCE(AVG(CASE WHEN stream = 1 AND latency_ms > ttft_ms AND output_tokens > 0
+				THEN output_tokens * 1000.0 / (latency_ms - ttft_ms) END), 0)
+		FROM (
+			SELECT *, CUME_DIST() OVER (ORDER BY latency_ms) AS pct FROM usage_records %s
+		)
 	`, where), args...).Scan(
 		&resp.TotalRequests,
 		&resp.FailedRequests,
@@ -335,6 +404,11 @@ func (s *Storage) GetSummary(filter model.UsageFilter, hourly bool) (*model.Summ
 		&resp.CacheCreationTokens,
 		&resp.AvgLatencyMs,
 		&resp.AvgTTFTMs,
+		&resp.P50LatencyMs,
+		&resp.P95LatencyMs,
+		&resp.P99LatencyMs,
+		&resp.StreamRequests,
+		&resp.AvgOutputTps,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query total summary: %w", err)
@@ -345,14 +419,32 @@ func (s *Storage) GetSummary(filter model.UsageFilter, hourly bool) (*model.Summ
 	} else {
 		resp.SuccessRate = 100
 	}
+	if prompt := resp.InputTokens + resp.CacheReadTokens; prompt > 0 {
+		resp.CacheHitRate = float64(resp.CacheReadTokens) / float64(prompt) * 100
+	}
 
-	if resp.Models, err = s.groupStats("model, provider", "model", where, args); err != nil {
-		return nil, err
+	// Every dimension shares the same shape, so they are declared once and
+	// filled in a loop instead of repeating the plumbing per group.
+	groups := []struct {
+		groupBy   string
+		secondary string
+		target    *[]model.GroupStat
+	}{
+		{"model, provider", "model", &resp.Models},
+		{"provider", "", &resp.Providers},
+		{"api_key", "", &resp.APIKeys},
+		{"auth_id, auth_index, auth_type", "auth", &resp.Auths},
+		{"session_id", "", &resp.Sessions},
 	}
-	if resp.Providers, err = s.groupStats("provider", "", where, args); err != nil {
-		return nil, err
+	for _, group := range groups {
+		stats, err := s.groupStats(group.groupBy, group.secondary, where, args)
+		if err != nil {
+			return nil, err
+		}
+		*group.target = stats
 	}
-	if resp.APIKeys, err = s.groupStats("api_key", "", where, args); err != nil {
+
+	if resp.Failures, err = s.failureStats(where, args); err != nil {
 		return nil, err
 	}
 
@@ -364,13 +456,21 @@ func (s *Storage) GetSummary(filter model.UsageFilter, hourly bool) (*model.Summ
 	}
 	rows, err := s.db.Query(fmt.Sprintf(`
 		SELECT
-			SUBSTR(requested_at, 1, %d) AS bucket,
+			bucket,
 			COUNT(*),
 			COALESCE(SUM(failed), 0),
 			COALESCE(SUM(total_tokens), 0),
 			COALESCE(SUM(input_tokens), 0),
-			COALESCE(SUM(output_tokens), 0)
-		FROM usage_records %s
+			COALESCE(SUM(output_tokens), 0),
+			COALESCE(SUM(cache_read_tokens), 0),
+			COALESCE(SUM(reasoning_tokens), 0),
+			COALESCE(AVG(latency_ms), 0),
+			COALESCE(MIN(CASE WHEN pct >= 0.95 THEN latency_ms END), 0)
+		FROM (
+			SELECT *, SUBSTR(requested_at, 1, %[1]d) AS bucket,
+				CUME_DIST() OVER (PARTITION BY SUBSTR(requested_at, 1, %[1]d) ORDER BY latency_ms) AS pct
+			FROM usage_records %[2]s
+		)
 		GROUP BY bucket
 		ORDER BY bucket
 	`, bucketLen, where), args...)
@@ -382,7 +482,18 @@ func (s *Storage) GetSummary(filter model.UsageFilter, hourly bool) (*model.Summ
 	resp.Trend = []model.TrendPoint{}
 	for rows.Next() {
 		var p model.TrendPoint
-		if err := rows.Scan(&p.Bucket, &p.Requests, &p.Failed, &p.Tokens, &p.InputTokens, &p.OutputTokens); err != nil {
+		if err := rows.Scan(
+			&p.Bucket,
+			&p.Requests,
+			&p.Failed,
+			&p.Tokens,
+			&p.InputTokens,
+			&p.OutputTokens,
+			&p.CacheReadTokens,
+			&p.ReasoningTokens,
+			&p.AvgLatencyMs,
+			&p.P95LatencyMs,
+		); err != nil {
 			return nil, fmt.Errorf("scan trend: %w", err)
 		}
 		resp.Trend = append(resp.Trend, p)
@@ -390,13 +501,22 @@ func (s *Storage) GetSummary(filter model.UsageFilter, hourly bool) (*model.Summ
 	return resp, rows.Err()
 }
 
-// groupStats aggregates usage by one dimension. groupBy is a fixed column list
-// from GetSummary, never user input; secondary selects the second group column
-// carried into GroupStat.Secondary (empty for single-column grouping).
+// groupStats aggregates usage by one dimension. groupBy and secondary are
+// fixed column lists from GetSummary, never user input. secondary selects the
+// extra columns carried into GroupStat.Secondary:
+//   - "model": the provider the model was served by
+//   - "auth": the upstream credential identity
 func (s *Storage) groupStats(groupBy, secondary, where string, args []interface{}) ([]model.GroupStat, error) {
+	// auth rows carry three identity columns; everything else groups on the
+	// raw column list (model, provider groups on two).
+	selectCols := groupBy
+	if secondary == "auth" {
+		selectCols = "auth_id, auth_index, auth_type"
+	}
+
 	rows, err := s.db.Query(fmt.Sprintf(`
 		SELECT
-			%s,
+			%[1]s,
 			COUNT(*) AS requests,
 			COALESCE(SUM(failed), 0),
 			COALESCE(SUM(total_tokens), 0) AS tokens,
@@ -406,11 +526,17 @@ func (s *Storage) groupStats(groupBy, secondary, where string, args []interface{
 			COALESCE(SUM(cached_tokens), 0),
 			COALESCE(SUM(cache_read_tokens), 0),
 			COALESCE(SUM(cache_creation_tokens), 0),
-			COALESCE(AVG(latency_ms), 0)
-		FROM usage_records %[2]s
+			COALESCE(AVG(latency_ms), 0),
+			COALESCE(MIN(CASE WHEN pct >= 0.95 THEN latency_ms END), 0),
+			COALESCE(AVG(CASE WHEN stream = 1 AND ttft_ms > 0 THEN ttft_ms END), 0),
+			COALESCE(SUM(CASE WHEN stream = 1 THEN 1 ELSE 0 END), 0)
+		FROM (
+			SELECT *, CUME_DIST() OVER (PARTITION BY %[1]s ORDER BY latency_ms) AS pct
+			FROM usage_records %[2]s
+		)
 		GROUP BY %[1]s
 		ORDER BY tokens DESC, requests DESC
-	`, groupBy, where), args...)
+	`, selectCols, where), args...)
 	if err != nil {
 		return nil, fmt.Errorf("query %s stats: %w", groupBy, err)
 	}
@@ -419,10 +545,13 @@ func (s *Storage) groupStats(groupBy, secondary, where string, args []interface{
 	stats := []model.GroupStat{}
 	for rows.Next() {
 		var g model.GroupStat
-		var name, sec string
+		var name, second, third string
 		dest := []any{&name}
 		if secondary != "" {
-			dest = append(dest, &sec)
+			dest = append(dest, &second)
+		}
+		if secondary == "auth" {
+			dest = append(dest, &third)
 		}
 		dest = append(dest,
 			&g.Requests,
@@ -435,13 +564,59 @@ func (s *Storage) groupStats(groupBy, secondary, where string, args []interface{
 			&g.CacheReadTokens,
 			&g.CacheCreationTokens,
 			&g.AvgLatencyMs,
+			&g.P95LatencyMs,
+			&g.AvgTtftMs,
+			&g.StreamRequests,
 		)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("scan %s stats: %w", groupBy, err)
 		}
 		g.Name = name
-		g.Secondary = sec
+		g.Secondary = second
+		if secondary == "auth" {
+			// auth_id is the group key; show its type alongside for readability.
+			if third != "" {
+				g.Name = fmt.Sprintf("%s · %s", name, third)
+			}
+		}
 		stats = append(stats, g)
+	}
+	return stats, rows.Err()
+}
+
+// failureStats groups failed requests by upstream status and error type, and
+// attaches one truncated sample body per group for quick triage.
+func (s *Storage) failureStats(where string, args []interface{}) ([]model.FailureStat, error) {
+	// The failure-only clause is ANDed onto the caller's filter.
+	clause := "failed = 1"
+	if where != "" {
+		clause = strings.TrimPrefix(where, "WHERE ") + " AND failed = 1"
+	}
+
+	rows, err := s.db.Query(fmt.Sprintf(`
+		SELECT
+			status_code,
+			COALESCE(error_type, ''),
+			COUNT(*),
+			COALESCE(MAX(CASE WHEN failure_body != '' THEN SUBSTR(failure_body, 1, 300) END), '')
+		FROM usage_records
+		WHERE %s
+		GROUP BY status_code, error_type
+		ORDER BY COUNT(*) DESC, status_code
+		LIMIT 20
+	`, clause), args...)
+	if err != nil {
+		return nil, fmt.Errorf("query failure stats: %w", err)
+	}
+	defer rows.Close()
+
+	stats := []model.FailureStat{}
+	for rows.Next() {
+		var f model.FailureStat
+		if err := rows.Scan(&f.StatusCode, &f.ErrorType, &f.Requests, &f.Sample); err != nil {
+			return nil, fmt.Errorf("scan failure stats: %w", err)
+		}
+		stats = append(stats, f)
 	}
 	return stats, rows.Err()
 }
@@ -467,12 +642,12 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 
 	rows, err := s.db.Query(fmt.Sprintf(`
 		SELECT
-			id, request_id, trace_id, session_id, provider, base_url,
-			model, response_model, alias, api_key,
+			id, request_id, trace_id, session_id, parent_session_id, provider, base_url,
+			executor_type, model, response_model, alias, api_key,
 			auth_id, auth_index, auth_type, source,
 			reasoning_effort, service_tier, response_service_tier,
 			stream, generate, requested_at, latency_ms, ttft_ms,
-			failed, status_code, COALESCE(failure_body, ''), COALESCE(response_headers, ''),
+			failed, status_code, COALESCE(error_type, ''), COALESCE(failure_body, ''), COALESCE(response_headers, ''),
 			input_tokens, output_tokens, reasoning_tokens,
 			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens
 		FROM usage_records
@@ -494,8 +669,10 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 			&r.RequestID,
 			&r.TraceID,
 			&r.SessionID,
+			&r.ParentSessionID,
 			&r.Provider,
 			&r.BaseURL,
+			&r.ExecutorType,
 			&r.Model,
 			&r.ResponseModel,
 			&r.Alias,
@@ -514,6 +691,7 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 			&r.TTFTMs,
 			&r.Failed,
 			&r.StatusCode,
+			&r.ErrorType,
 			&r.FailureBody,
 			&rawHeaders,
 			&r.InputTokens,
@@ -576,6 +754,9 @@ func (s *Storage) GetOptions() (*model.OptionsResponse, error) {
 	}
 	if resp.APIKeys, err = distinct("api_key"); err != nil {
 		return nil, fmt.Errorf("query api_key options: %w", err)
+	}
+	if resp.Auths, err = distinct("auth_id"); err != nil {
+		return nil, fmt.Errorf("query auth options: %w", err)
 	}
 	return resp, nil
 }

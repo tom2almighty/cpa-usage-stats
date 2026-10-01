@@ -16,9 +16,13 @@ import (
 
 const (
 	timeLayout = "2006-01-02 15:04:05.000"
-	// schemaVersion gates table layout. Bump it whenever the table changes:
-	// older layouts are dropped and rebuilt (no data migration is supported).
-	schemaVersion = 4
+	// schemaVersion is the table layout this build writes. Adding a column or
+	// an index does NOT require a bump: ensureSchema applies those additively on
+	// every open. Bump it only for a change ALTER TABLE cannot express (column
+	// type or meaning, dropping a column). A database reporting a higher version
+	// than this constant was written by a newer plugin and is refused rather
+	// than silently rebuilt.
+	schemaVersion = 1
 	// Upstream error pages can be large HTML documents; keep enough to debug.
 	maxFailureBody = 4 << 10
 	// Response headers for failed requests; filtered and capped to avoid database bloat.
@@ -121,7 +125,7 @@ func New(dbPath string) (*Storage, error) {
 	db.SetConnMaxLifetime(0)
 
 	s := &Storage{db: db}
-	if err := s.initSchema(); err != nil {
+	if err := s.ensureSchema(); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("init sqlite schema: %w", err)
 	}
@@ -139,76 +143,132 @@ func (s *Storage) Close() error {
 	return nil
 }
 
-func (s *Storage) initSchema() error {
+// tableColumns is the full usage_records layout in creation order, and the
+// single source of truth for it. ensureSchema creates the table from this list
+// and appends any column a pre-existing table lacks, so adding a field is a
+// one-line change here. A column added later must be nullable or carry a
+// DEFAULT: SQLite refuses ALTER TABLE ADD COLUMN for NOT NULL without default.
+var tableColumns = []struct{ name, ddl string }{
+	{"id", "INTEGER PRIMARY KEY AUTOINCREMENT"},
+	{"request_id", "TEXT NOT NULL"},
+	{"trace_id", "TEXT"},
+	{"session_id", "TEXT"},
+	{"parent_session_id", "TEXT"},
+	{"provider", "TEXT"},
+	{"base_url", "TEXT"},
+	{"executor_type", "TEXT"},
+	{"model", "TEXT"},
+	{"response_model", "TEXT"},
+	{"alias", "TEXT"},
+	{"api_key", "TEXT"},
+	{"auth_id", "TEXT"},
+	{"auth_index", "TEXT"},
+	{"auth_type", "TEXT"},
+	{"source", "TEXT"},
+	{"reasoning_effort", "TEXT"},
+	{"service_tier", "TEXT"},
+	{"response_service_tier", "TEXT"},
+	{"stream", "INTEGER NOT NULL DEFAULT 0"},
+	{"generate", "INTEGER NOT NULL DEFAULT 1"},
+	{"requested_at", "DATETIME NOT NULL"},
+	{"latency_ms", "INTEGER NOT NULL DEFAULT 0"},
+	{"ttft_ms", "INTEGER NOT NULL DEFAULT 0"},
+	{"failed", "INTEGER NOT NULL DEFAULT 0"},
+	{"status_code", "INTEGER NOT NULL DEFAULT 0"},
+	{"error_type", "TEXT"},
+	{"failure_body", "TEXT"},
+	{"response_headers", "TEXT"},
+	{"input_tokens", "INTEGER NOT NULL DEFAULT 0"},
+	{"output_tokens", "INTEGER NOT NULL DEFAULT 0"},
+	{"reasoning_tokens", "INTEGER NOT NULL DEFAULT 0"},
+	{"cached_tokens", "INTEGER NOT NULL DEFAULT 0"},
+	{"cache_read_tokens", "INTEGER NOT NULL DEFAULT 0"},
+	{"cache_creation_tokens", "INTEGER NOT NULL DEFAULT 0"},
+	{"total_tokens", "INTEGER NOT NULL DEFAULT 0"},
+}
+
+// tableIndexes are applied on every open. requested_at leads every range query;
+// the composites cover the common "recent failures" and "group by model within
+// a range" access patterns.
+var tableIndexes = []string{
+	`CREATE INDEX IF NOT EXISTS idx_usage_requested_at ON usage_records(requested_at DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_usage_model ON usage_records(model, requested_at)`,
+	`CREATE INDEX IF NOT EXISTS idx_usage_provider ON usage_records(provider, requested_at)`,
+	`CREATE INDEX IF NOT EXISTS idx_usage_api_key ON usage_records(api_key, requested_at)`,
+	`CREATE INDEX IF NOT EXISTS idx_usage_session ON usage_records(session_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_usage_auth ON usage_records(auth_id, auth_index)`,
+	`CREATE INDEX IF NOT EXISTS idx_usage_failed ON usage_records(failed, status_code) WHERE failed = 1`,
+}
+
+// ensureSchema brings the database up to the layout this build expects. It is
+// idempotent and additive: a fresh database is created from tableColumns, and a
+// pre-existing one has only the columns and indexes it is missing added, so
+// accumulated statistics survive plugin upgrades.
+func (s *Storage) ensureSchema() error {
 	var version int
 	if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return fmt.Errorf("read user_version: %w", err)
 	}
-	if version == schemaVersion {
-		return nil
+	// A newer database was written by a newer plugin. Its extra columns and
+	// any layout change we cannot express additively mean we must not touch it.
+	if version > schemaVersion {
+		return fmt.Errorf("database schema v%d is newer than this plugin supports (v%d): upgrade the plugin", version, schemaVersion)
 	}
 
-	// Any other layout (fresh database, a pre-v8 table, or an older plugin
-	// version) is dropped and rebuilt: statistics are derived data, so a clean
-	// rebuild beats carrying migration code for layouts nobody runs any more.
-	schema := `
-	DROP TABLE IF EXISTS usage_records;
+	defs := make([]string, len(tableColumns))
+	for i, c := range tableColumns {
+		defs[i] = c.name + " " + c.ddl
+	}
+	if _, err := s.db.Exec("CREATE TABLE IF NOT EXISTS usage_records (" + strings.Join(defs, ", ") + ")"); err != nil {
+		return fmt.Errorf("create table: %w", err)
+	}
 
-	CREATE TABLE usage_records (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		request_id TEXT NOT NULL,
-		trace_id TEXT,
-		session_id TEXT,
-		parent_session_id TEXT,
-		provider TEXT,
-		base_url TEXT,
-		executor_type TEXT,
-		model TEXT,
-		response_model TEXT,
-		alias TEXT,
-		api_key TEXT,
-		auth_id TEXT,
-		auth_index TEXT,
-		auth_type TEXT,
-		source TEXT,
-		reasoning_effort TEXT,
-		service_tier TEXT,
-		response_service_tier TEXT,
-		stream INTEGER NOT NULL DEFAULT 0,
-		generate INTEGER NOT NULL DEFAULT 1,
-		requested_at DATETIME NOT NULL,
-		latency_ms INTEGER NOT NULL DEFAULT 0,
-		ttft_ms INTEGER NOT NULL DEFAULT 0,
-		failed INTEGER NOT NULL DEFAULT 0,
-		status_code INTEGER NOT NULL DEFAULT 0,
-		error_type TEXT,
-		failure_body TEXT,
-		response_headers TEXT,
-		input_tokens INTEGER NOT NULL DEFAULT 0,
-		output_tokens INTEGER NOT NULL DEFAULT 0,
-		reasoning_tokens INTEGER NOT NULL DEFAULT 0,
-		cached_tokens INTEGER NOT NULL DEFAULT 0,
-		cache_read_tokens INTEGER NOT NULL DEFAULT 0,
-		cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
-		total_tokens INTEGER NOT NULL DEFAULT 0
-	);
+	existing, err := s.existingColumns()
+	if err != nil {
+		return err
+	}
+	for _, c := range tableColumns {
+		if existing[c.name] {
+			continue
+		}
+		if _, err := s.db.Exec("ALTER TABLE usage_records ADD COLUMN " + c.name + " " + c.ddl); err != nil {
+			return fmt.Errorf("add column %s: %w", c.name, err)
+		}
+	}
+	for _, idx := range tableIndexes {
+		if _, err := s.db.Exec(idx); err != nil {
+			return fmt.Errorf("create index: %w", err)
+		}
+	}
 
-	-- requested_at leads every range query; the composite covers the common
-	-- "recent failures" and "group by model within a range" access patterns.
-	CREATE INDEX idx_usage_requested_at ON usage_records(requested_at DESC);
-	CREATE INDEX idx_usage_model ON usage_records(model, requested_at);
-	CREATE INDEX idx_usage_provider ON usage_records(provider, requested_at);
-	CREATE INDEX idx_usage_api_key ON usage_records(api_key, requested_at);
-	CREATE INDEX idx_usage_session ON usage_records(session_id);
-	CREATE INDEX idx_usage_auth ON usage_records(auth_id, auth_index);
-	CREATE INDEX idx_usage_failed ON usage_records(failed, status_code) WHERE failed = 1;
-
-	PRAGMA user_version = ` + fmt.Sprint(schemaVersion) + `;
-	`
-	if _, err := s.db.Exec(schema); err != nil {
-		return fmt.Errorf("create schema: %w", err)
+	if version != schemaVersion {
+		if _, err := s.db.Exec("PRAGMA user_version = " + fmt.Sprint(schemaVersion)); err != nil {
+			return fmt.Errorf("set user_version: %w", err)
+		}
 	}
 	return nil
+}
+
+// existingColumns lists the columns currently present on usage_records.
+func (s *Storage) existingColumns() (map[string]bool, error) {
+	rows, err := s.db.Query("SELECT name FROM pragma_table_info('usage_records')")
+	if err != nil {
+		return nil, fmt.Errorf("read table info: %w", err)
+	}
+	defer rows.Close()
+
+	columns := make(map[string]bool, len(tableColumns))
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan table info: %w", err)
+		}
+		columns[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate table info: %w", err)
+	}
+	return columns, nil
 }
 
 // InsertBatch inserts multiple usage records in a single transaction.

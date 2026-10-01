@@ -114,11 +114,13 @@ func TestStorageSummaryRecordsAndRetention(t *testing.T) {
 	}
 }
 
-// TestLegacySchemaRebuilt verifies that a database created by the pre-v8
-// plugin is dropped and rebuilt on open instead of failing queries.
-func TestLegacySchemaRebuilt(t *testing.T) {
+// TestLegacySchemaUpgraded verifies that a database created by an older plugin
+// keeps its rows and has the missing columns added on open, instead of being
+// dropped and rebuilt.
+func TestLegacySchemaUpgraded(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "usage.db")
 
+	// A pre-v8 layout: no trace/session/auth_index columns, no user_version.
 	legacy := `
 	CREATE TABLE usage_records (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -146,9 +148,6 @@ func TestLegacySchemaRebuilt(t *testing.T) {
 	);
 	INSERT INTO usage_records (request_id, model, requested_at) VALUES ('legacy-1', 'old-model', '2026-01-01 00:00:00.000');
 	`
-	if _, err := sql.Open("sqlite", dbPath); err != nil {
-		t.Fatalf("open legacy db: %v", err)
-	}
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		t.Fatalf("open legacy db: %v", err)
@@ -168,12 +167,76 @@ func TestLegacySchemaRebuilt(t *testing.T) {
 	if err := store.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != schemaVersion {
 		t.Fatalf("user_version = %d, %v; want %d", version, err, schemaVersion)
 	}
+	// The pre-existing row must survive the upgrade.
 	var count int
-	if err := store.db.QueryRow("SELECT COUNT(*) FROM usage_records").Scan(&count); err != nil || count != 0 {
-		t.Fatalf("legacy rows survived rebuild: %d, %v", count, err)
+	if err := store.db.QueryRow("SELECT COUNT(*) FROM usage_records WHERE request_id = 'legacy-1'").Scan(&count); err != nil || count != 1 {
+		t.Fatalf("legacy row lost: count = %d, %v; want 1", count, err)
 	}
+	// Every column this build expects must now be present.
+	assertAllColumns(t, store)
 	if err := store.InsertBatch([]model.UsageRecord{{RequestID: "new-1", Model: "gpt-5", RequestedAt: time.Now(), Detail: model.UsageDetail{TotalTokens: 1}}}); err != nil {
-		t.Fatalf("insert into rebuilt table: %v", err)
+		t.Fatalf("insert into upgraded table: %v", err)
+	}
+}
+
+// TestEnsureSchemaIdempotent verifies that opening an already-current database
+// neither rewrites the schema nor touches the data.
+func TestEnsureSchemaIdempotent(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "usage.db")
+
+	store, err := New(dbPath)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := store.InsertBatch([]model.UsageRecord{{RequestID: "keep-1", Model: "gpt-5", RequestedAt: time.Now(), Detail: model.UsageDetail{TotalTokens: 42}}}); err != nil {
+		t.Fatalf("InsertBatch: %v", err)
+	}
+	_ = store.Close()
+
+	// Re-open: ensureSchema runs again and must be a no-op.
+	store2, err := New(dbPath)
+	if err != nil {
+		t.Fatalf("re-open: %v", err)
+	}
+	defer store2.Close()
+
+	var count, tokens int
+	if err := store2.db.QueryRow("SELECT COUNT(*), COALESCE(SUM(total_tokens), 0) FROM usage_records").Scan(&count, &tokens); err != nil || count != 1 || tokens != 42 {
+		t.Fatalf("rows/tokens after re-open = %d/%d, %v; want 1/42", count, tokens, err)
+	}
+	assertAllColumns(t, store2)
+}
+
+// TestNewerSchemaRefused verifies that a database written by a newer plugin is
+// rejected instead of being silently downgraded.
+func TestNewerSchemaRefused(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "usage.db")
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if _, err := db.Exec("PRAGMA user_version = " + fmt.Sprint(schemaVersion+1)); err != nil {
+		t.Fatalf("set user_version: %v", err)
+	}
+	_ = db.Close()
+
+	if _, err := New(dbPath); err == nil {
+		t.Fatal("New accepted a database with a newer schema version")
+	}
+}
+
+// assertAllColumns fails if usage_records is missing any declared column.
+func assertAllColumns(t *testing.T, store *Storage) {
+	t.Helper()
+	present, err := store.existingColumns()
+	if err != nil {
+		t.Fatalf("existingColumns: %v", err)
+	}
+	for _, c := range tableColumns {
+		if !present[c.name] {
+			t.Errorf("column %q missing after ensureSchema", c.name)
+		}
 	}
 }
 

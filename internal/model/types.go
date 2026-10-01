@@ -237,16 +237,14 @@ type GroupStat struct {
 
 // TrendPoint is one hour ("2006-01-02 15") or day ("2006-01-02") bucket.
 type TrendPoint struct {
-	Bucket          string  `json:"bucket"`
-	Requests        int64   `json:"requests"`
-	Failed          int64   `json:"failed"`
-	Tokens          int64   `json:"tokens"`
-	InputTokens     int64   `json:"input_tokens"`
-	OutputTokens    int64   `json:"output_tokens"`
-	CacheReadTokens int64   `json:"cache_read_tokens"`
-	ReasoningTokens int64   `json:"reasoning_tokens"`
-	AvgLatencyMs    float64 `json:"avg_latency_ms"`
-	P95LatencyMs    float64 `json:"p95_latency_ms"`
+	Bucket       string  `json:"bucket"`
+	Requests     int64   `json:"requests"`
+	Failed       int64   `json:"failed"`
+	Tokens       int64   `json:"tokens"`
+	InputTokens  int64   `json:"input_tokens"`
+	OutputTokens int64   `json:"output_tokens"`
+	AvgLatencyMs float64 `json:"avg_latency_ms"`
+	P95LatencyMs float64 `json:"p95_latency_ms"`
 }
 
 // RecordListResponse represents paginated records response.

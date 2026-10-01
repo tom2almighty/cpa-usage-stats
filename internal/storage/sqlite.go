@@ -462,8 +462,6 @@ func (s *Storage) GetSummary(filter model.UsageFilter, hourly bool) (*model.Summ
 			COALESCE(SUM(total_tokens), 0),
 			COALESCE(SUM(input_tokens), 0),
 			COALESCE(SUM(output_tokens), 0),
-			COALESCE(SUM(cache_read_tokens), 0),
-			COALESCE(SUM(reasoning_tokens), 0),
 			COALESCE(AVG(latency_ms), 0),
 			COALESCE(MIN(CASE WHEN pct >= 0.95 THEN latency_ms END), 0)
 		FROM (
@@ -489,8 +487,6 @@ func (s *Storage) GetSummary(filter model.UsageFilter, hourly bool) (*model.Summ
 			&p.Tokens,
 			&p.InputTokens,
 			&p.OutputTokens,
-			&p.CacheReadTokens,
-			&p.ReasoningTokens,
 			&p.AvgLatencyMs,
 			&p.P95LatencyMs,
 		); err != nil {

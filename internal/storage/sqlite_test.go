@@ -434,13 +434,13 @@ func TestSummaryDerivedMetrics(t *testing.T) {
 		t.Errorf("failure stat should carry a body sample")
 	}
 
-	// Trend points must carry the extended token split and latency stats.
+	// Trend points must carry latency stats for the chart tooltip.
 	if len(summary.Trend) == 0 {
 		t.Fatal("trend is empty")
 	}
 	point := summary.Trend[0]
-	if point.CacheReadTokens != 1500 || point.AvgLatencyMs <= 0 || point.P95LatencyMs <= 0 {
-		t.Errorf("trend point = %+v, want cache read 1500 and latency stats", point)
+	if point.AvgLatencyMs <= 0 || point.P95LatencyMs <= 0 {
+		t.Errorf("trend point = %+v, want latency stats", point)
 	}
 }
 

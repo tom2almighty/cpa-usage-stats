@@ -54,7 +54,15 @@ interface RecordsTabProps {
   pricing: PricingState;
 }
 
-const EMPTY_FILTERS: RecordsFilters = { model: "", provider: "", apiKey: "", status: "all", keyword: "" };
+const EMPTY_FILTERS: RecordsFilters = {
+  model: "",
+  provider: "",
+  apiKey: "",
+  authId: "",
+  sessionId: "",
+  status: "all",
+  keyword: "",
+};
 
 const ROW_SKELETON_KEYS = ["row-a", "row-b", "row-c", "row-d", "row-e"];
 
@@ -211,6 +219,13 @@ function DetailRow({ record, cost }: { record: StoredRecord; cost: RecordCost | 
               .join(" · ")}
           />
           <DetailItem label={t("records.detail.reasoning_effort")} value={record.reasoning_effort} />
+          <DetailItem label={t("records.detail.executor")} value={record.executor_type} />
+          {record.parent_session_id && (
+            <DetailItem label={t("records.detail.parent_session")} value={record.parent_session_id} />
+          )}
+          {record.failed && record.error_type && (
+            <DetailItem label={t("records.detail.error_type")} value={record.error_type} />
+          )}
           <DetailItem
             label={t("records.detail.service_tier")}
             value={
@@ -310,14 +325,21 @@ export function RecordsTab({
   const { t } = useI18n();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  // 关键字本地保留并防抖，避免每敲一个字就发一次查询
+  // 关键字与会话 ID 本地保留并防抖，避免每敲一个字就发一次查询
   const [keyword, setKeyword] = useState(filters.keyword);
+  const [sessionId, setSessionId] = useState(filters.sessionId);
 
   useEffect(() => {
     if (keyword === filters.keyword) return;
     const timer = setTimeout(() => onFiltersChange({ ...filters, keyword: keyword.trim() }), 300);
     return () => clearTimeout(timer);
   }, [keyword, filters, onFiltersChange]);
+
+  useEffect(() => {
+    if (sessionId === filters.sessionId) return;
+    const timer = setTimeout(() => onFiltersChange({ ...filters, sessionId: sessionId.trim() }), 300);
+    return () => clearTimeout(timer);
+  }, [sessionId, filters, onFiltersChange]);
 
   const setFilter = (patch: Partial<RecordsFilters>) => {
     onFiltersChange({ ...filters, ...patch });
@@ -326,6 +348,7 @@ export function RecordsTab({
 
   const resetFilters = () => {
     setKeyword("");
+    setSessionId("");
     onFiltersChange(EMPTY_FILTERS);
     onPageChange(1);
   };
@@ -341,9 +364,11 @@ export function RecordsTab({
   const items = data?.items ?? [];
   const hasActiveFilters =
     Boolean(keyword.trim()) ||
+    Boolean(sessionId.trim()) ||
     Boolean(filters.model) ||
     Boolean(filters.provider) ||
     Boolean(filters.apiKey) ||
+    Boolean(filters.authId) ||
     filters.status !== "all";
 
   return (
@@ -365,7 +390,7 @@ export function RecordsTab({
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
           <div className="relative">
             <Search className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -400,6 +425,24 @@ export function RecordsTab({
             options={options.api_keys.map((key) => ({ value: key, label: maskApiKey(key) }))}
             className="w-full"
           />
+
+          <FilterSelect
+            value={filters.authId}
+            onChange={(value) => setFilter({ authId: value })}
+            allLabel={t("records.filter.auth_all")}
+            options={options.auths.map((auth) => ({ value: auth, label: auth }))}
+            className="w-full"
+          />
+
+          <div className="relative">
+            <Input
+              value={sessionId}
+              onChange={(event) => setSessionId(event.target.value)}
+              placeholder={t("records.filter.session_placeholder")}
+              aria-label={t("records.filter.session_placeholder")}
+              className="font-mono text-xs"
+            />
+          </div>
 
           <FilterSelect
             value={filters.status === "all" ? "" : filters.status}

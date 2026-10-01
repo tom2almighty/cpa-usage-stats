@@ -70,29 +70,34 @@
     "kpi": {
       "requests": "总请求数",
       "tokens": "Token 总消耗",
-      "io_tokens": "输入 / 输出 Tokens",
       "latency": "平均响应 / 首字延迟",
       "cost": "预估成本",
       "success_rate": "成功率",
       "failed_count": "{{count}} 失败",
-      "tokens_raw": "{{count}} tokens",
       "reasoning": "思考 {{value}}",
       "cache_read": "缓存读 {{value}}",
       "cache_write": "缓存写 {{value}}",
       "ttft": "TTFT {{value}}",
       "priced": "{{priced}}/{{total}} 个模型已匹配价格",
       "pricing_unavailable": "价格数据不可用",
-      "no_cost_data": "暂无价格数据"
+      "no_cost_data": "暂无价格数据",
+      "cache": "缓存命中率",
+      "throughput": "平均输出吞吐",
+      "tps": "{{value}} t/s",
+      "stream_share": "{{count}}/{{total}} 为流式请求",
+      "percentiles": "P95 {{p95}} · P99 {{p99}}",
+      "io_short": "入 {{input}} / 出 {{output}}"
     },
     "trend": {
       "hourly": "按小时走势",
       "daily": "按天走势",
-      "requests_ok": "成功请求",
-      "failed_requests": "失败请求",
-      "input_tokens": "输入 Tokens",
-      "output_tokens": "输出 Tokens",
       "total_tokens": "合计 {{value}}",
-      "empty": "暂无趋势数据"
+      "empty": "暂无趋势数据",
+      "input_label": "输入 Tokens",
+      "output_label": "输出 Tokens",
+      "latency_line": "平均 {{avg}} · P95 {{p95}}",
+      "requests_ok": "成功请求",
+      "failed_requests": "失败请求"
     },
     "provider": {
       "title": "Provider 分布",
@@ -129,6 +134,35 @@
         "requests": "请求数",
         "failed": "失败数",
         "tokens": "总 Tokens",
+        "latency": "平均延迟"
+      }
+    },
+    "dropped": {
+      "title": "有 {{count}} 条用量记录被丢弃",
+      "desc": "内存队列已满，这部分请求没有被统计。可调大 channel_size 或减小 batch_size / flush_interval_ms 来缓解。"
+    },
+    "auths": {
+      "title": "上游凭据用量",
+      "count": "共 {{count}} 个",
+      "th": {
+        "auth": "凭据",
+        "requests": "请求数",
+        "failed": "失败数",
+        "tokens": "总 Tokens",
+        "cache": "缓存读",
+        "latency": "平均延迟",
+        "p95": "P95 延迟"
+      }
+    },
+    "sessions": {
+      "title": "会话用量",
+      "count": "共 {{count}} 个会话",
+      "th": {
+        "session": "会话 ID",
+        "requests": "请求数",
+        "tokens": "总 Tokens",
+        "avg_tokens": "平均 Tokens/请求",
+        "cache": "缓存读",
         "latency": "平均延迟"
       }
     }
@@ -180,7 +214,9 @@
       "key_all": "全部 Key",
       "status_all": "全部状态",
       "status_success": "仅成功（2xx）",
-      "status_failed": "仅失败（4xx/5xx）"
+      "status_failed": "仅失败（4xx/5xx）",
+      "auth_all": "全部凭据",
+      "session_placeholder": "会话 ID"
     },
     "th": {
       "time": "时间",
@@ -224,7 +260,10 @@
       "unmatched": "未匹配",
       "failure_title": "失败响应诊断（HTTP {{status}}）",
       "failure_body": "响应体",
-      "failure_headers": "上游响应头"
+      "failure_headers": "上游响应头",
+      "error_type": "错误类型",
+      "executor": "执行器类型",
+      "parent_session": "父会话 ID"
     },
     "pagination": {
       "summary": "第 {{page}} 页 / 共 {{pages}} 页 · 每页 {{size}} 条",
@@ -235,5 +274,19 @@
   "auth": {
     "title": "需要管理密钥",
     "desc": "未能自动读取管理密钥（面板未保存密钥，或看板与 CLIProxyAPI 跨源部署）。请输入管理密钥后重试。"
+  },
+  "failures": {
+    "title": "失败诊断",
+    "count": "共 {{count}} 次失败",
+    "empty": "该范围内没有失败请求",
+    "empty_desc": "所有上游调用都返回了成功状态。",
+    "no_type": "(未识别)",
+    "th": {
+      "status": "状态码",
+      "type": "错误类型",
+      "requests": "次数",
+      "share": "占比",
+      "sample": "响应样本"
+    }
   }
 }

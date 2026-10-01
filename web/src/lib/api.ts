@@ -1,5 +1,5 @@
 import { resolveApiBase } from "@/lib/auth";
-import type { OptionsResponse, RecordListResponse, SummaryData } from "@/types";
+import type { OptionsResponse, RecordListResponse, RuntimeStats, SummaryData } from "@/types";
 
 const API_BASE = "/v0/management/plugins/cpa-usage-stats";
 
@@ -16,6 +16,8 @@ interface ApiFilters {
   model: string;
   provider: string;
   apiKey: string;
+  authId: string;
+  sessionId: string;
   failed?: string;
   keyword?: string;
 }
@@ -50,6 +52,8 @@ function filterParams(filters: ApiFilters): Record<string, string> {
     model: filters.model,
     provider: filters.provider,
     api_key: filters.apiKey,
+    auth_id: filters.authId,
+    session_id: filters.sessionId,
     failed: filters.failed ?? "",
     keyword: filters.keyword?.trim() ?? "",
   };
@@ -74,6 +78,10 @@ export function fetchRecords(
 
 export function fetchOptions(key: string): Promise<OptionsResponse> {
   return request<OptionsResponse>(key, "/options", {});
+}
+
+export function fetchStats(key: string): Promise<RuntimeStats> {
+  return request<RuntimeStats>(key, "/stats", {});
 }
 
 /**

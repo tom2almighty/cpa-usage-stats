@@ -1,14 +1,19 @@
 import {
   Activity,
   AlertCircle,
+  AlertTriangle,
   ChartColumn,
   Check,
   CircleDollarSign,
   Clock,
   Copy,
   Database,
+  Gauge,
   KeyRound,
-  Layers,
+  MessagesSquare,
+  ServerCog,
+  ShieldAlert,
+  Timer,
   TrendingUp,
   Zap,
 } from "lucide-react";
@@ -16,6 +21,8 @@ import { useState } from "react";
 import { CustomPriceModal } from "@/components/CustomPriceModal";
 import { DonutChart } from "@/components/charts/DonutChart";
 import { TrendChart } from "@/components/charts/TrendChart";
+import { FailurePanel } from "@/components/FailurePanel";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -143,9 +150,12 @@ export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
 
   const models = summary?.model_stats ?? [];
   const apiKeys = summary?.api_key_stats ?? [];
+  const auths = summary?.auth_stats ?? [];
+  const sessions = summary?.session_stats ?? [];
   const maxModelTokens = Math.max(1, ...models.map((model) => model.total_tokens));
   const hourly = summary?.bucket === "hour";
   const costs = totalCost(pricing.table, models);
+  const dropped = summary?.dropped_records ?? 0;
 
   const handleCopy = async (key: string) => {
     if (!(await copyToClipboard(key))) return;
@@ -156,7 +166,8 @@ export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
   return (
     <div className="space-y-4">
       {/* KPI */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
+      {/* 6 张指标卡：2/3/6 列递进，任何断点都整除，不留孤儿卡 */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <MetricCard
           title={t("overview.kpi.requests")}
           icon={<Activity />}
@@ -180,20 +191,25 @@ export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
           loading={loading}
           value={formatTokens(summary?.total_tokens ?? 0)}
           sub={
-            <span className="truncate">
-              {t("overview.kpi.tokens_raw", { count: formatNumber(summary?.total_tokens ?? 0) })}
-            </span>
+            <>
+              <span>
+                {t("overview.kpi.io_short", {
+                  input: formatTokens(summary?.input_tokens ?? 0),
+                  output: formatTokens(summary?.output_tokens ?? 0),
+                })}
+              </span>
+              <span>·</span>
+              <span>{t("overview.kpi.reasoning", { value: formatTokens(summary?.reasoning_tokens ?? 0) })}</span>
+            </>
           }
         />
         <MetricCard
-          title={t("overview.kpi.io_tokens")}
-          icon={<Layers />}
+          title={t("overview.kpi.cache")}
+          icon={<Gauge />}
           loading={loading}
-          value={`${formatTokens(summary?.input_tokens ?? 0)} / ${formatTokens(summary?.output_tokens ?? 0)}`}
+          value={formatPercent(summary?.cache_hit_rate ?? 0)}
           sub={
             <>
-              <span>{t("overview.kpi.reasoning", { value: formatTokens(summary?.reasoning_tokens ?? 0) })}</span>
-              <span>·</span>
               <span>{t("overview.kpi.cache_read", { value: formatTokens(summary?.cache_read_tokens ?? 0) })}</span>
               <span>·</span>
               <span>{t("overview.kpi.cache_write", { value: formatTokens(summary?.cache_creation_tokens ?? 0) })}</span>
@@ -205,7 +221,41 @@ export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
           icon={<Clock />}
           loading={loading}
           value={formatDuration(summary?.avg_latency_ms ?? 0)}
-          sub={<span>{t("overview.kpi.ttft", { value: formatDuration(summary?.avg_ttft_ms ?? 0) })}</span>}
+          sub={
+            <>
+              <span>{t("overview.kpi.ttft", { value: formatDuration(summary?.avg_ttft_ms ?? 0) })}</span>
+              <span>·</span>
+              <Tooltip>
+                <TooltipTrigger render={<span className="cursor-help underline decoration-dotted" />}>
+                  {t("overview.kpi.percentiles", {
+                    p95: formatDuration(summary?.p95_latency_ms ?? 0),
+                    p99: formatDuration(summary?.p99_latency_ms ?? 0),
+                  })}
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div className="space-y-0.5 font-mono tabular-nums">
+                    <div>P50: {formatDuration(summary?.p50_latency_ms ?? 0)}</div>
+                    <div>P95: {formatDuration(summary?.p95_latency_ms ?? 0)}</div>
+                    <div>P99: {formatDuration(summary?.p99_latency_ms ?? 0)}</div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </>
+          }
+        />
+        <MetricCard
+          title={t("overview.kpi.throughput")}
+          icon={<Timer />}
+          loading={loading}
+          value={t("overview.kpi.tps", { value: (summary?.avg_output_tps ?? 0).toFixed(1) })}
+          sub={
+            <span className="truncate">
+              {t("overview.kpi.stream_share", {
+                count: formatNumber(summary?.stream_requests ?? 0),
+                total: formatNumber(summary?.total_requests ?? 0),
+              })}
+            </span>
+          }
         />
         <MetricCard
           title={t("overview.kpi.cost")}
@@ -223,6 +273,14 @@ export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
           }
         />
       </div>
+
+      {dropped > 0 && (
+        <Alert variant="destructive">
+          <AlertTriangle />
+          <AlertTitle>{t("overview.dropped.title", { count: formatNumber(dropped) })}</AlertTitle>
+          <AlertDescription>{t("overview.dropped.desc")}</AlertDescription>
+        </Alert>
+      )}
 
       {/* 趋势 + Provider 分布 */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -482,6 +540,160 @@ export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
           </Table>
         </CardContent>
       </Card>
+
+      {/* 上游凭据用量 */}
+      {auths.length > 0 && (
+        <Card>
+          <CardHeader className="flex-row items-center justify-between gap-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <ServerCog className="size-4 text-muted-foreground" />
+              {t("overview.auths.title")}
+            </CardTitle>
+            <span className="text-xs text-muted-foreground">{t("overview.auths.count", { count: auths.length })}</span>
+          </CardHeader>
+          <CardContent className="px-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("overview.auths.th.auth")}</TableHead>
+                  <TableHead className="text-right">{t("overview.auths.th.requests")}</TableHead>
+                  <TableHead className="text-right">{t("overview.auths.th.failed")}</TableHead>
+                  <TableHead className="text-right">{t("overview.auths.th.tokens")}</TableHead>
+                  <TableHead className="text-right">{t("overview.auths.th.cache")}</TableHead>
+                  <TableHead className="text-right">{t("overview.auths.th.latency")}</TableHead>
+                  <TableHead className="text-right">{t("overview.auths.th.p95")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {auths.map((auth) => (
+                  <TableRow key={`${auth.name}-${auth.secondary ?? ""}`}>
+                    <TableCell className="font-mono">
+                      <div className="flex items-center gap-1.5">
+                        <span>{auth.name}</span>
+                        {auth.secondary && <span className="text-xs text-muted-foreground">#{auth.secondary}</span>}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">{formatNumber(auth.requests)}</TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">
+                      {auth.failed > 0 ? (
+                        <span className="inline-flex items-center gap-1 text-destructive">
+                          <AlertCircle className="size-3" />
+                          {formatNumber(auth.failed)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">0</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">
+                      {formatTokens(auth.total_tokens)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                      {formatTokens(auth.cache_read_tokens)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                      {formatDuration(auth.avg_latency_ms)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                      {formatDuration(auth.p95_latency_ms)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 失败诊断 */}
+      <Card>
+        <CardHeader className="flex-row items-center justify-between gap-2">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <ShieldAlert className="size-4 text-muted-foreground" />
+            {t("failures.title")}
+          </CardTitle>
+          <span className="text-xs text-muted-foreground">
+            {t("failures.count", { count: formatNumber(summary?.failed_requests ?? 0) })}
+          </span>
+        </CardHeader>
+        <CardContent className="px-0">
+          {loading ? (
+            <div className="space-y-2 px-4">
+              {KEY_SKELETON_ROWS.map((row) => (
+                <Skeleton key={row} className="h-5 w-full" />
+              ))}
+            </div>
+          ) : (
+            <FailurePanel failures={summary?.failure_stats ?? []} totalFailed={summary?.failed_requests ?? 0} />
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 会话排行 */}
+      {sessions.length > 0 && (
+        <Card>
+          <CardHeader className="flex-row items-center justify-between gap-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <MessagesSquare className="size-4 text-muted-foreground" />
+              {t("overview.sessions.title")}
+            </CardTitle>
+            <span className="text-xs text-muted-foreground">
+              {t("overview.sessions.count", { count: sessions.length })}
+            </span>
+          </CardHeader>
+          <CardContent className="px-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("overview.sessions.th.session")}</TableHead>
+                  <TableHead className="text-right">{t("overview.sessions.th.requests")}</TableHead>
+                  <TableHead className="text-right">{t("overview.sessions.th.tokens")}</TableHead>
+                  <TableHead className="text-right">{t("overview.sessions.th.avg_tokens")}</TableHead>
+                  <TableHead className="text-right">{t("overview.sessions.th.cache")}</TableHead>
+                  <TableHead className="text-right">{t("overview.sessions.th.latency")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sessions.slice(0, 15).map((session) => (
+                  <TableRow key={session.name}>
+                    <TableCell className="font-mono text-xs">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="max-w-56 truncate" title={session.name}>
+                          {session.name}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          className="text-muted-foreground hover:text-foreground"
+                          title={t("common.copy")}
+                          aria-label={t("common.copy")}
+                          onClick={() => handleCopy(session.name)}
+                        >
+                          {copiedKey === session.name ? <Check className="text-primary" /> : <Copy />}
+                        </Button>
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">
+                      {formatNumber(session.requests)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">
+                      {formatTokens(session.total_tokens)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                      {formatTokens(session.requests > 0 ? session.total_tokens / session.requests : 0)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                      {formatTokens(session.cache_read_tokens)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                      {formatDuration(session.avg_latency_ms)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {editing && (
         <CustomPriceModal

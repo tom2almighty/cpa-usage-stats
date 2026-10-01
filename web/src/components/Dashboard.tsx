@@ -32,7 +32,15 @@ const REFRESH_OPTIONS = [
   { value: "60", labelKey: "dashboard.auto_refresh.60" },
 ] as const;
 
-const EMPTY_FILTERS: RecordsFilters = { model: "", provider: "", apiKey: "", status: "all", keyword: "" };
+const EMPTY_FILTERS: RecordsFilters = {
+  model: "",
+  provider: "",
+  apiKey: "",
+  authId: "",
+  sessionId: "",
+  status: "all",
+  keyword: "",
+};
 
 interface LoadResult {
   summary: SummaryData;
@@ -84,7 +92,7 @@ export function Dashboard() {
   const unauthorized = query.error instanceof UnauthorizedError;
   const summary = query.data?.summary ?? null;
   const records = query.data?.records ?? null;
-  const options = query.data?.options ?? { models: [], providers: [], api_keys: [] };
+  const options = query.data?.options ?? { models: [], providers: [], api_keys: [], auths: [] };
   const empty = summary !== null && summary.total_requests === 0;
 
   // 新密钥验证通过后自动收起弹窗

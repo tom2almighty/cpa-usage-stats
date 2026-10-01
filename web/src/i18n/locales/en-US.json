@@ -70,29 +70,34 @@
     "kpi": {
       "requests": "Total requests",
       "tokens": "Total tokens",
-      "io_tokens": "Input / output tokens",
       "latency": "Avg latency / TTFT",
       "cost": "Estimated cost",
       "success_rate": "success rate",
       "failed_count": "{{count}} failed",
-      "tokens_raw": "{{count}} tokens",
       "reasoning": "Reasoning {{value}}",
       "cache_read": "Cache read {{value}}",
       "cache_write": "Cache write {{value}}",
       "ttft": "TTFT {{value}}",
       "priced": "{{priced}}/{{total}} models priced",
       "pricing_unavailable": "Pricing data unavailable",
-      "no_cost_data": "No pricing data"
+      "no_cost_data": "No pricing data",
+      "cache": "Cache hit rate",
+      "throughput": "Avg output throughput",
+      "tps": "{{value}} t/s",
+      "stream_share": "{{count}}/{{total}} streamed",
+      "percentiles": "P95 {{p95}} · P99 {{p99}}",
+      "io_short": "in {{input}} / out {{output}}"
     },
     "trend": {
       "hourly": "Hourly trend",
       "daily": "Daily trend",
-      "requests_ok": "Succeeded",
-      "failed_requests": "Failed",
-      "input_tokens": "Input tokens",
-      "output_tokens": "Output tokens",
       "total_tokens": "{{value}} total",
-      "empty": "No trend data"
+      "empty": "No trend data",
+      "input_label": "Input tokens",
+      "output_label": "Output tokens",
+      "latency_line": "Avg {{avg}} · P95 {{p95}}",
+      "requests_ok": "Succeeded",
+      "failed_requests": "Failed"
     },
     "provider": {
       "title": "Provider distribution",
@@ -129,6 +134,35 @@
         "requests": "Requests",
         "failed": "Failed",
         "tokens": "Total tokens",
+        "latency": "Avg latency"
+      }
+    },
+    "dropped": {
+      "title": "{{count}} usage records were dropped",
+      "desc": "The in-memory queue filled up, so those requests were never counted. Raise channel_size or lower batch_size / flush_interval_ms to avoid it."
+    },
+    "auths": {
+      "title": "Upstream credentials",
+      "count": "{{count}} credentials",
+      "th": {
+        "auth": "Credential",
+        "requests": "Requests",
+        "failed": "Failed",
+        "tokens": "Total tokens",
+        "cache": "Cache read",
+        "latency": "Avg latency",
+        "p95": "P95 latency"
+      }
+    },
+    "sessions": {
+      "title": "Session usage",
+      "count": "{{count}} sessions",
+      "th": {
+        "session": "Session ID",
+        "requests": "Requests",
+        "tokens": "Total tokens",
+        "avg_tokens": "Avg tokens/request",
+        "cache": "Cache read",
         "latency": "Avg latency"
       }
     }
@@ -180,7 +214,9 @@
       "key_all": "All keys",
       "status_all": "All statuses",
       "status_success": "Success only (2xx)",
-      "status_failed": "Failed only (4xx/5xx)"
+      "status_failed": "Failed only (4xx/5xx)",
+      "auth_all": "All credentials",
+      "session_placeholder": "Session ID"
     },
     "th": {
       "time": "Time",
@@ -224,7 +260,10 @@
       "unmatched": "Unmatched",
       "failure_title": "Failure diagnostics (HTTP {{status}})",
       "failure_body": "Response body",
-      "failure_headers": "Upstream response headers"
+      "failure_headers": "Upstream response headers",
+      "error_type": "Error type",
+      "executor": "Executor type",
+      "parent_session": "Parent session ID"
     },
     "pagination": {
       "summary": "Page {{page}} / {{pages}} · {{size}} per page",
@@ -235,5 +274,19 @@
   "auth": {
     "title": "Management key required",
     "desc": "The management key could not be resolved automatically (no key saved in the panel, or the dashboard runs cross-origin). Enter it to continue."
+  },
+  "failures": {
+    "title": "Failure diagnostics",
+    "count": "{{count}} failures",
+    "empty": "No failed requests in this range",
+    "empty_desc": "Every upstream call returned a success status.",
+    "no_type": "(unclassified)",
+    "th": {
+      "status": "Status",
+      "type": "Error type",
+      "requests": "Count",
+      "share": "Share",
+      "sample": "Sample"
+    }
   }
 }

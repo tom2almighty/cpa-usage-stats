@@ -6,18 +6,22 @@ CLIProxyAPI（CPA）用量持久化与统计看板插件（v8 版）。
 
 本插件作为 CLIProxyAPI 的原生动态库插件运行，通过 v8 用量观察能力（`usage_plugin`）接收上游模型请求的完整用量记录并持久化到 SQLite，同时内嵌 Web 统计看板，直接集成到 CLIProxyAPI 自带的管理中心（Management 面板）的插件菜单中，开箱即用，无需额外独立部署 Web 页面或前端服务。
 
-**v8 版本要求**：本插件固定声明 RPC schema 6，要求 v8 时代的 CLIProxyAPI 宿主，不向后兼容旧版宿主（旧宿主会拒绝加载本插件）。首次打开数据库时会自动重建表结构，**旧版本插件积累的统计数据会被丢弃**。
+**v8 版本要求**：本插件固定声明 RPC schema 6，要求 v8 时代的 CLIProxyAPI 宿主，不向后兼容旧版宿主（旧宿主会拒绝加载本插件）。
 
 ## 记录的数据字段
 
 在 v8 `UsageRecord` 全量字段中持久化：
 
-- 标识：`RequestID`、`TraceID`、`SessionID`
-- 路由：`Provider`、`BaseURL`、`Model`、`ResponseModel`（上游实际返回的模型）、`Alias`
+- 标识：`RequestID`、`TraceID`、`SessionID`、`ParentSessionID`
+- 路由：`Provider`、`BaseURL`、`ExecutorType`、`Model`、`ResponseModel`（上游实际返回的模型）、`Alias`
 - 客户端：`APIKey`、`AuthID`、`AuthIndex`、`AuthType`、`Source`
 - 请求特征：`ReasoningEffort`、`ServiceTier`、`ResponseServiceTier`、`Stream`、`Generate`
 - 性能：`Latency`、`TTFT`、失败状态码与响应体
 - Token：输入 / 输出 / 思考 / 缓存总量 / **缓存读 / 缓存写** / 总计
+
+失败请求额外落库从响应体解析出的**错误类型**（兼容 `error.type`、`error.code`、`type`、`code` 四种上游写法），用于失败归组。
+
+> 表结构以 `PRAGMA user_version` 版本号控制，当前为 4。版本不匹配时表会被直接重建——统计属于派生数据，插件不提供跨版本数据迁移，升级后历史统计会清空。
 
 ## 构建方式
 
@@ -107,8 +111,9 @@ http://127.0.0.1:8317/v0/resource/plugins/cpa-usage-stats/dashboard
 
 ### 5. 看板功能
 
-- **用量总览**：请求量 / 成功率、Token 总量、输入输出与缓存读写分列、平均延迟 / TTFT、**预估成本**五组指标卡；按小时（今日 / 昨天）或按天（7 天 / 30 天 / 全部）的双轴趋势图（成功 / 失败请求堆叠柱 + 输入 / 输出 Tokens 堆叠面积）；Provider 分布环形图；模型用量排行（含失败数、Token 占比、**单价与预估成本**、可点击设置自定义价格）；客户端 Key 用量表。
-- **调用明细**：关键词（Key / 模型 / Request / Trace / Session / 错误信息）与模型、Provider、Key、状态多维筛选，分页浏览；展开单条记录查看 Request ID、Trace ID、Session ID、认证信息、上游 Base URL、推理力度、Service Tier（请求 → 响应）、流式 / 生成标记、完整 Token 分解、**匹配到的模型价格与单条预估成本**、失败响应详情。
+- **用量总览**：请求量 / 成功率、Token 总量（含输入 / 输出 / 思考）、**缓存命中率**、平均延迟与 **P50 / P95 / P99 分位**、**平均输出吞吐（t/s）与流式占比**、预估成本六组指标卡；按小时（今日 / 昨天）或按天（7 天 / 30 天 / 全部）的双轴趋势图（成功 / 失败请求堆叠柱 + 输入 / 输出 Tokens 堆叠面积，tooltip 带平均与 P95 延迟）；Provider 分布环形图；模型用量排行（含失败数、Token 占比、**单价与预估成本**、可点击设置自定义价格）；**上游凭据用量**（按 auth 维度看各账号的请求、失败、Token、缓存与延迟）；**失败诊断**（按状态码 + 错误类型归组，附响应样本）；**会话用量**（按 session 聚合请求数、Token、平均 Token/请求）；客户端 Key 用量表。
+- **调用明细**：关键词（Key / 模型 / Request / Trace / Session / 错误信息）与模型、Provider、Key、凭据、会话 ID、状态多维筛选，分页浏览；展开单条记录查看 Request ID、Trace ID、会话 / 父会话 ID、认证信息、上游 Base URL、执行器类型、推理力度、Service Tier（请求 → 响应）、流式 / 生成标记、**错误类型**、完整 Token 分解、**匹配到的模型价格与单条预估成本**、失败响应详情。
+- **数据可信度**：内存队列写满导致记录被丢弃时，总览页顶部会明确告警（含丢弃条数），避免把残缺数据当成全量。
 - 时间范围切换、自动刷新（10s / 30s / 60s）、中英双语、深浅主题（含跟随系统）。
 
 看板前端与 cpa-dashboard 面板保持同一套技术选型与设计体系：React 19 + TypeScript + Vite + Tailwind CSS v4，组件由 shadcn CLI（`base-nova` 风格，Base UI 底层）生成，图表用 shadcn chart（Recharts）配合 `--chart-*` 主题变量，主题 Token 与面板完全一致，因此嵌入管理中心时配色与面板协调。文案走 i18next（默认中文，可切英文），语言选择存 `localStorage` 的 `cpa-usage-stats.language`。
@@ -124,13 +129,16 @@ http://127.0.0.1:8317/v0/resource/plugins/cpa-usage-stats/dashboard
 
 ### 7. 管理 API
 
-插件在 `/v0/management/plugins/cpa-usage-stats` 下注册三个只读接口（宿主管理密钥鉴权）：
+插件在 `/v0/management/plugins/cpa-usage-stats` 下注册四个只读接口（宿主管理密钥鉴权）：
 
 | 接口 | 说明 |
 | --- | --- |
-| `GET /summary` | 聚合统计（支持 `range`、`model`、`provider`、`api_key`、`failed`、`keyword`） |
+| `GET /summary` | 聚合统计（支持 `range`、`model`、`provider`、`api_key`、`auth_id`、`session_id`、`failed`、`keyword`） |
 | `GET /records` | 调用明细分页（同上筛选 + `page`、`page_size`） |
-| `GET /options` | 筛选下拉选项（去重后的模型 / Provider / Key） |
+| `GET /options` | 筛选下拉选项（去重后的模型 / Provider / Key / 凭据） |
+| `GET /stats` | 运行时计数：`dropped_records`、`queue_depth`、`queue_capacity` |
+
+`/summary` 除总量与趋势外，还返回 `model_stats`、`provider_stats`、`api_key_stats`、`auth_stats`、`session_stats`、`failure_stats` 六个聚合维度，以及 `cache_hit_rate`、`p50/p95/p99_latency_ms`、`avg_output_tps`、`stream_requests` 等派生指标。
 
 > 说明：按宿主设计，插件自定义管理路由统一挂载在 `/v0/management` 前缀下（v8 宿主不将 `/v8/management` 转发给插件），这与 v8 管理API的插件扩展规范一致。`/v0/management` 与 `/v8/management` 共用同一套管理密钥鉴权与失败计数（连续 5 次失败封禁 IP 约 30 分钟），所以插件既不需要、也无法改用 `/v8` 前缀。
 

@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Area, Bar, CartesianGrid, ComposedChart, XAxis, YAxis } from "recharts";
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { useI18n } from "@/i18n/context";
-import { cn, formatBucket, formatNumber, formatTokens } from "@/lib/utils";
+import { cn, formatBucket, formatDuration, formatNumber, formatTokens } from "@/lib/utils";
 import type { TrendPoint } from "@/types";
 
 interface TrendChartProps {
@@ -19,8 +19,8 @@ interface TrendChartProps {
 const SERIES = [
   { key: "success", labelKey: "overview.trend.requests_ok", color: "var(--chart-1)" },
   { key: "failed", labelKey: "overview.trend.failed_requests", color: "var(--destructive)" },
-  { key: "input", labelKey: "overview.trend.input_tokens", color: "var(--chart-3)" },
-  { key: "output", labelKey: "overview.trend.output_tokens", color: "var(--chart-2)" },
+  { key: "input", labelKey: "overview.trend.input_label", color: "var(--chart-3)" },
+  { key: "output", labelKey: "overview.trend.output_label", color: "var(--chart-2)" },
 ] as const;
 
 type SeriesKey = (typeof SERIES)[number]["key"];
@@ -52,6 +52,8 @@ export function TrendChart({ points, hourly, className }: TrendChartProps) {
         input: point.input_tokens,
         output: point.output_tokens,
         total: point.tokens,
+        avgLatency: point.avg_latency_ms,
+        p95Latency: point.p95_latency_ms,
       })),
     [points],
   );
@@ -105,12 +107,20 @@ export function TrendChart({ points, hourly, className }: TrendChartProps) {
                   if (!point) return "";
                   const bucket = typeof point.bucket === "string" ? formatBucket(point.bucket, hourly) : "";
                   return (
-                    <span className="flex items-center gap-2">
-                      {bucket}
-                      <span className="font-normal text-muted-foreground">
-                        {t("overview.trend.total_tokens", { value: formatTokens(Number(point.total) || 0) })}
-                      </span>
-                    </span>
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        {bucket}
+                        <span className="font-normal text-muted-foreground">
+                          {t("overview.trend.total_tokens", { value: formatTokens(Number(point.total) || 0) })}
+                        </span>
+                      </div>
+                      <div className="font-normal text-muted-foreground">
+                        {t("overview.trend.latency_line", {
+                          avg: formatDuration(Number(point.avgLatency) || 0),
+                          p95: formatDuration(Number(point.p95Latency) || 0),
+                        })}
+                      </div>
+                    </div>
                   );
                 }}
                 formatter={(value, name) => (

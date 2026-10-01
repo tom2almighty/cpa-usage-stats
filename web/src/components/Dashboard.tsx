@@ -3,6 +3,7 @@ import { AlertTriangle, ChartColumn, KeyRound, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { KeyDialog } from "@/components/KeyDialog";
 import { LanguageToggle } from "@/components/language-toggle";
+import { Logo } from "@/components/logo";
 import { OverviewTab } from "@/components/OverviewTab";
 import { PricingSource } from "@/components/PricingSource";
 import { RecordsTab } from "@/components/RecordsTab";
@@ -98,14 +99,9 @@ export function Dashboard() {
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4 md:p-6">
       <header className="flex flex-col gap-3 border-b pb-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
-            <ChartColumn className="size-5" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold tracking-tight md:text-xl">{t("dashboard.title")}</h1>
-            <p className="truncate text-xs text-muted-foreground md:text-sm">{t("dashboard.subtitle")}</p>
-          </div>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Logo className="size-8 shrink-0 rounded-md" />
+          <h1 className="truncate text-lg font-semibold tracking-tight md:text-xl">{t("dashboard.title")}</h1>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -118,7 +114,7 @@ export function Dashboard() {
               setPage(1);
             }}
             aria-label={t("dashboard.range.label")}
-            className="bg-muted p-[3px]"
+            className="max-w-full flex-wrap bg-muted p-[3px]"
           >
             {RANGE_OPTIONS.map((value) => (
               <ToggleGroupItem key={value} value={value} size="sm">

@@ -20,7 +20,6 @@
   },
   "dashboard": {
     "title": "CLIProxyAPI 用量统计",
-    "subtitle": "v8 用量观察 · SQLite 持久化 · 请求 / Token / 成本多维看板",
     "range": {
       "today": "今日",
       "yesterday": "昨天",

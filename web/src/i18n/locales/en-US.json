@@ -20,7 +20,6 @@
   },
   "dashboard": {
     "title": "CLIProxyAPI Usage Stats",
-    "subtitle": "v8 usage observer · SQLite persistence · requests / tokens / cost dashboard",
     "range": {
       "today": "Today",
       "yesterday": "Yesterday",

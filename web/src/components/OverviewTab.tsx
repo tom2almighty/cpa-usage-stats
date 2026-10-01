@@ -16,7 +16,6 @@ import { useState } from "react";
 import { CustomPriceModal } from "@/components/CustomPriceModal";
 import { DonutChart } from "@/components/charts/DonutChart";
 import { TrendChart } from "@/components/charts/TrendChart";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -87,7 +86,7 @@ function PriceCell({ match, onEdit }: { match?: PriceMatch | null; onEdit: () =>
   const { t } = useI18n();
   if (!match) {
     return (
-      <Button variant="link" size="xs" className="text-muted-foreground" onClick={onEdit}>
+      <Button variant="link" size="xs" className="-mr-2 text-muted-foreground" onClick={onEdit}>
         {t("overview.models.set_price")}
       </Button>
     );
@@ -96,10 +95,10 @@ function PriceCell({ match, onEdit }: { match?: PriceMatch | null; onEdit: () =>
   const label = `${formatUnitPrice(match.price.input)} / ${formatUnitPrice(match.price.output)}`;
   const content =
     match.matchType === "custom" ? (
-      <Badge variant="secondary" className="gap-1">
-        {t("overview.models.custom_badge")}
-        <span className="font-mono">{label}</span>
-      </Badge>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="font-mono tabular-nums">{label}</span>
+        <span className="text-primary">*</span>
+      </span>
     ) : match.matchType === "fuzzy" ? (
       <Tooltip>
         <TooltipTrigger
@@ -117,8 +116,19 @@ function PriceCell({ match, onEdit }: { match?: PriceMatch | null; onEdit: () =>
       <span className="font-mono tabular-nums">{label}</span>
     );
 
+  // 负外边距抵消按钮内边距，让单价与右对齐表头齐平
   return (
-    <Button variant="ghost" size="xs" className="font-mono" onClick={onEdit} title={t("pricing.dialog.title")}>
+    <Button
+      variant="ghost"
+      size="xs"
+      className="-mr-2 font-mono"
+      onClick={onEdit}
+      title={
+        match.matchType === "custom"
+          ? `${t("overview.models.custom_badge")} · ${t("pricing.dialog.title")}`
+          : t("pricing.dialog.title")
+      }
+    >
       {content}
     </Button>
   );
@@ -271,7 +281,7 @@ export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
                 <TableHead className="text-right">{t("overview.models.th.price")}</TableHead>
                 <TableHead className="text-right">{t("overview.models.th.cost")}</TableHead>
                 <TableHead className="text-right">{t("overview.models.th.latency")}</TableHead>
-                <TableHead className="w-24">{t("overview.models.th.share")}</TableHead>
+                <TableHead className="w-24 text-right">{t("overview.models.th.share")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -298,15 +308,7 @@ export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
                     <TableRow key={`${model.name} ${model.secondary ?? ""}`}>
                       <TableCell className="text-center font-mono text-xs text-muted-foreground">{index + 1}</TableCell>
                       <TableCell className="max-w-48 truncate font-medium">{model.name || "-"}</TableCell>
-                      <TableCell>
-                        {model.secondary ? (
-                          <Badge variant="outline" className="font-normal">
-                            {model.secondary}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
+                      <TableCell className="text-muted-foreground">{model.secondary || "-"}</TableCell>
                       <TableCell className="text-right font-mono tabular-nums">
                         {formatNumber(model.requests)}
                         {model.failed > 0 && (
@@ -457,12 +459,12 @@ export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-mono tabular-nums">{formatNumber(key.requests)}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right font-mono tabular-nums">
                       {key.failed > 0 ? (
-                        <Badge variant="destructive" className="gap-1">
-                          <AlertCircle />
+                        <span className="inline-flex items-center gap-1 text-destructive">
+                          <AlertCircle className="size-3" />
                           {formatNumber(key.failed)}
-                        </Badge>
+                        </span>
                       ) : (
                         <span className="text-muted-foreground">0</span>
                       )}

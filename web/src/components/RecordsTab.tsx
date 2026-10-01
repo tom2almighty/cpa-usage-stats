@@ -563,17 +563,15 @@ function RecordRows({
           {formatDateTime(record.requested_at)}
         </TableCell>
         <TableCell>
-          {record.failed ? (
-            <Badge variant="destructive" className="gap-1">
-              <AlertCircle />
-              {record.status_code || 500}
-            </Badge>
-          ) : (
-            <Badge variant="secondary" className="gap-1">
-              <CheckCircle2 />
-              {record.status_code || 200}
-            </Badge>
-          )}
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 font-mono tabular-nums",
+              record.failed ? "text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {record.failed ? <AlertCircle className="size-3" /> : <CheckCircle2 className="size-3" />}
+            {record.status_code || (record.failed ? 500 : 200)}
+          </span>
         </TableCell>
         <TableCell className="font-medium">
           <div className="flex max-w-48 flex-col">
@@ -581,11 +579,7 @@ function RecordRows({
             {aliasNote && <span className="truncate text-xs text-muted-foreground">{aliasNote}</span>}
           </div>
         </TableCell>
-        <TableCell>
-          <Badge variant="outline" className="font-normal">
-            {record.provider || "-"}
-          </Badge>
-        </TableCell>
+        <TableCell className="text-muted-foreground">{record.provider || "-"}</TableCell>
         <TableCell className="text-right font-mono tabular-nums">
           <span className="text-muted-foreground">{formatTokens(record.input_tokens)}</span>
           {" / "}

@@ -18,6 +18,22 @@
   "language": {
     "title": "语言"
   },
+  "display": {
+    "title": "显示设置",
+    "desc": "只影响界面上的数字与金额展示，不改动任何已记录的数据。",
+    "number_style": "数字单位",
+    "number_style_localized": "跟随语言",
+    "number_style_en": "英文单位 (K/M)",
+    "number_style_hint": "词元、请求数等大数字的缩写方式。跟随语言时中文用 万/亿，英文单位固定用 K/M。",
+    "currency": "币种",
+    "currency_usd": "美元 (USD)",
+    "currency_cny": "人民币 (CNY)",
+    "currency_hint": "模型价格以美元 / 100 万词元存储，这里只决定展示时是否换算。",
+    "exchange_rate": "汇率 (1 USD = ? CNY)",
+    "exchange_rate_hint": "需要自己维护，不会自动联网更新。",
+    "exchange_rate_invalid": "汇率需要是大于 0 的数字",
+    "action": "显示设置"
+  },
   "dashboard": {
     "title": "CLIProxyAPI 用量统计",
     "range": {
@@ -69,7 +85,7 @@
   "overview": {
     "kpi": {
       "requests": "总请求数",
-      "tokens": "Token 总消耗",
+      "tokens": "词元总消耗",
       "latency": "平均响应 / 首字延迟",
       "cost": "预估成本",
       "success_rate": "成功率",
@@ -93,8 +109,11 @@
       "daily": "按天走势",
       "total_tokens": "合计 {{value}}",
       "empty": "暂无趋势数据",
-      "input_label": "输入 Tokens",
-      "output_label": "输出 Tokens",
+      "tab_requests": "请求数",
+      "tab_tokens": "词元消耗",
+      "latency_title": "延迟分位",
+      "input_label": "输入词元",
+      "output_label": "输出词元",
       "latency_line": "平均 {{avg}} · P95 {{p95}}",
       "requests_ok": "成功请求",
       "failed_requests": "失败请求"
@@ -113,7 +132,7 @@
         "model": "模型",
         "provider": "Provider",
         "requests": "请求数",
-        "tokens": "Tokens（入/出）",
+        "tokens": "词元（入/出）",
         "reasoning_cache": "思考 / 缓存读写",
         "price": "价格（入/出 · 1M）",
         "cost": "预估成本",
@@ -133,7 +152,7 @@
         "key": "API Key（已脱敏）",
         "requests": "请求数",
         "failed": "失败数",
-        "tokens": "总 Tokens",
+        "tokens": "总词元",
         "latency": "平均延迟"
       }
     },
@@ -148,7 +167,7 @@
         "auth": "凭据",
         "requests": "请求数",
         "failed": "失败数",
-        "tokens": "总 Tokens",
+        "tokens": "总词元",
         "cache": "缓存读",
         "latency": "平均延迟",
         "p95": "P95 延迟"
@@ -160,8 +179,8 @@
       "th": {
         "session": "会话 ID",
         "requests": "请求数",
-        "tokens": "总 Tokens",
-        "avg_tokens": "平均 Tokens/请求",
+        "tokens": "总词元",
+        "avg_tokens": "平均词元/请求",
         "cache": "缓存读",
         "latency": "平均延迟"
       }
@@ -189,9 +208,9 @@
     },
     "dialog": {
       "title": "自定义模型价格",
-      "desc": "为模型 {{model}} 设置单价（美元 / 100 万 Tokens）。价格保存在本地，优先于 models.dev 目录。",
-      "input": "输入单价 ($ / 1M)",
-      "output": "输出单价 ($ / 1M)",
+      "desc": "为模型 {{model}} 设置单价（美元 / 100 万词元）。价格保存在本地，优先于 models.dev 目录。",
+      "input": "输入单价 (USD / 1M)",
+      "output": "输出单价 (USD / 1M)",
       "cache_read": "缓存读取单价（可选）",
       "cache_write": "缓存写入单价（可选）",
       "reasoning": "思考 / 推理单价（可选，缺省沿用输出价）",
@@ -223,7 +242,7 @@
       "status": "状态",
       "model": "模型",
       "provider": "Provider",
-      "tokens": "Tokens（入 / 出 / 总）",
+      "tokens": "词元（入 / 出 / 总）",
       "cost": "预估成本",
       "latency": "耗时 / TTFT",
       "key": "Key / 认证"
@@ -250,7 +269,7 @@
       "generate": "生成",
       "not_generate": "非生成",
       "pricing_source": "模型定价来源",
-      "tokens_detail": "Tokens 与费用明细",
+      "tokens_detail": "词元与费用明细",
       "tokens_formula": "入 {{input}} · 出 {{output}}",
       "tokens_reasoning": " · 思考 {{value}}",
       "tokens_cache_read": " · 缓存读 {{value}}",

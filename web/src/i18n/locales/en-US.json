@@ -18,6 +18,22 @@
   "language": {
     "title": "Language"
   },
+  "display": {
+    "title": "Display settings",
+    "desc": "Affects how numbers and amounts are shown only; stored data is never changed.",
+    "number_style": "Number units",
+    "number_style_localized": "Follow language",
+    "number_style_en": "English units (K/M)",
+    "number_style_hint": "How large counts are abbreviated. Following the language uses 万/亿 in Chinese; English units always use K/M.",
+    "currency": "Currency",
+    "currency_usd": "US dollar (USD)",
+    "currency_cny": "Chinese yuan (CNY)",
+    "currency_hint": "Model prices are stored as USD per 1M tokens; this only decides whether to convert for display.",
+    "exchange_rate": "Exchange rate (1 USD = ? CNY)",
+    "exchange_rate_hint": "Maintained by you; it is never fetched automatically.",
+    "exchange_rate_invalid": "Exchange rate must be a number greater than 0",
+    "action": "Display settings"
+  },
   "dashboard": {
     "title": "CLIProxyAPI Usage Stats",
     "range": {
@@ -93,6 +109,9 @@
       "daily": "Daily trend",
       "total_tokens": "{{value}} total",
       "empty": "No trend data",
+      "tab_requests": "Requests",
+      "tab_tokens": "Tokens",
+      "latency_title": "Latency percentiles",
       "input_label": "Input tokens",
       "output_label": "Output tokens",
       "latency_line": "Avg {{avg}} · P95 {{p95}}",
@@ -190,8 +209,8 @@
     "dialog": {
       "title": "Custom model price",
       "desc": "Set the unit price for {{model}} (USD per 1M tokens). It is stored locally and takes precedence over the models.dev catalog.",
-      "input": "Input price ($ / 1M)",
-      "output": "Output price ($ / 1M)",
+      "input": "Input price (USD / 1M)",
+      "output": "Output price (USD / 1M)",
       "cache_read": "Cache read price (optional)",
       "cache_write": "Cache write price (optional)",
       "reasoning": "Reasoning price (optional, defaults to output price)",

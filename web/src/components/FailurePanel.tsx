@@ -2,8 +2,8 @@ import { ShieldAlert } from "lucide-react";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useFormat } from "@/hooks/use-format";
 import { useI18n } from "@/i18n/context";
-import { formatNumber } from "@/lib/utils";
 import type { FailureStat } from "@/types";
 
 interface FailurePanelProps {
@@ -14,6 +14,7 @@ interface FailurePanelProps {
 /** 失败请求按上游状态码 + 错误类型归组，附一条样本响应体便于定位。 */
 export function FailurePanel({ failures, totalFailed }: FailurePanelProps) {
   const { t } = useI18n();
+  const { formatNumber } = useFormat();
 
   if (failures.length === 0) {
     return (

@@ -2,20 +2,8 @@ import { cn } from "cn";
 
 export { cn };
 
-const numberFormat = new Intl.NumberFormat("zh-CN");
-
-export function formatNumber(num: number): string {
-  if (!Number.isFinite(num)) return "0";
-  return numberFormat.format(num);
-}
-
-/** 1_234_567 -> "1.23M"；坐标轴与表格里的紧凑展示 */
-export function formatTokens(tokens: number): string {
-  if (!Number.isFinite(tokens) || tokens === 0) return "0";
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(2)}M`;
-  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}k`;
-  return formatNumber(tokens);
-}
+// 与展示偏好相关的 formatNumber / formatTokens / formatCost / formatUnitPrice 在 @/lib/format，
+// 由 useFormat() 按用户的数字单位与币种设置构造，见 hooks/use-format.tsx。
 
 export function formatDuration(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return "0ms";
@@ -38,25 +26,6 @@ export function formatDateTime(stored: string): string {
 export function formatBucket(bucket: string, hourly: boolean): string {
   if (!bucket) return "-";
   return hourly ? `${bucket.slice(11, 13)}:00` : bucket.slice(5, 10);
-}
-
-/** 美元金额，保留到能分辨亚分级估算的精度 */
-export function formatCost(usd: number): string {
-  if (!Number.isFinite(usd)) return "-";
-  if (usd === 0) return "$0";
-  const abs = Math.abs(usd);
-  if (abs < 0.01) return `$${usd.toFixed(4)}`;
-  if (abs < 1) return `$${usd.toFixed(3)}`;
-  if (abs < 1000) return `$${usd.toFixed(2)}`;
-  return `$${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(usd)}`;
-}
-
-/** 每 100 万 Tokens 的单价，如 "$3" / "$0.30" */
-export function formatUnitPrice(value: number): string {
-  if (!Number.isFinite(value)) return "-";
-  if (value === 0) return "$0";
-  if (value < 1) return `$${value.toFixed(2).replace(/0$/, "")}`;
-  return `$${Number.isInteger(value) ? value : value.toFixed(2)}`;
 }
 
 /** 脱敏 API Key：保留可辨识前缀与末 4 位 */

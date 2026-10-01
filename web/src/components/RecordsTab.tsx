@@ -26,20 +26,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useFormat } from "@/hooks/use-format";
 import type { PricingState } from "@/hooks/use-pricing";
 import { useI18n } from "@/i18n/context";
 import { type RecordCost, recordCost } from "@/lib/pricing";
-import {
-  cn,
-  copyToClipboard,
-  formatCost,
-  formatDateTime,
-  formatDuration,
-  formatNumber,
-  formatTokens,
-  formatUnitPrice,
-  maskApiKey,
-} from "@/lib/utils";
+import { cn, copyToClipboard, formatDateTime, formatDuration, maskApiKey } from "@/lib/utils";
 import type { OptionsResponse, RecordListResponse, RecordsFilters, StoredRecord } from "@/types";
 
 interface RecordsTabProps {
@@ -132,7 +123,7 @@ function DetailItem({ label, value, href }: { label: string; value: string; href
             <ExternalLink className="size-3 shrink-0 text-muted-foreground" />
           </a>
         ) : (
-          <span className="break-all">{value || "-"}</span>
+          <span className="min-w-0 break-all">{value || "-"}</span>
         )}
         {value && (
           <Button
@@ -153,6 +144,7 @@ function DetailItem({ label, value, href }: { label: string; value: string; href
 
 function CostCell({ cost }: { cost: RecordCost | null }) {
   const { t } = useI18n();
+  const { formatCost, formatUnitPrice } = useFormat();
   if (!cost) return <span className="text-muted-foreground">-</span>;
 
   const matchLabel =
@@ -197,12 +189,13 @@ function CostCell({ cost }: { cost: RecordCost | null }) {
 
 function DetailRow({ record, cost }: { record: StoredRecord; cost: RecordCost | null }) {
   const { t } = useI18n();
+  const { formatNumber, formatCost } = useFormat();
   const hasFailure = Boolean(record.failure_body) || Object.keys(record.response_headers ?? {}).length > 0;
 
   return (
     <TableRow className="bg-muted/40 hover:bg-muted/40">
       <TableCell colSpan={9} className="space-y-3 p-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <DetailItem label={t("records.detail.request_id")} value={record.request_id} />
           <DetailItem label={t("records.detail.trace_id")} value={record.trace_id} />
           <DetailItem label={t("records.detail.session_id")} value={record.session_id} />
@@ -323,6 +316,7 @@ export function RecordsTab({
   pricing,
 }: RecordsTabProps) {
   const { t } = useI18n();
+  const { formatNumber } = useFormat();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   // 关键字与会话 ID 本地保留并防抖，避免每敲一个字就发一次查询
@@ -477,10 +471,10 @@ export function RecordsTab({
                 <TableHead>{t("records.th.status")}</TableHead>
                 <TableHead>{t("records.th.model")}</TableHead>
                 <TableHead>{t("records.th.provider")}</TableHead>
-                <TableHead className="text-right">{t("records.th.tokens")}</TableHead>
-                <TableHead className="text-right">{t("records.th.cost")}</TableHead>
-                <TableHead className="text-right">{t("records.th.latency")}</TableHead>
-                <TableHead>{t("records.th.key")}</TableHead>
+                <TableHead className="w-32 text-right">{t("records.th.tokens")}</TableHead>
+                <TableHead className="w-24 text-right">{t("records.th.cost")}</TableHead>
+                <TableHead className="w-24 text-right">{t("records.th.latency")}</TableHead>
+                <TableHead className="max-w-40">{t("records.th.key")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -575,6 +569,7 @@ function RecordRows({
   onCopyKey: (key: string) => void;
 }) {
   const { t } = useI18n();
+  const { formatTokens } = useFormat();
   const aliasNote =
     (record.alias && record.alias !== record.model) || (record.response_model && record.response_model !== record.model)
       ? [
@@ -618,12 +613,22 @@ function RecordRows({
         </TableCell>
         <TableCell className="font-medium">
           <div className="flex max-w-48 flex-col">
-            <span className="truncate">{record.model}</span>
-            {aliasNote && <span className="truncate text-xs text-muted-foreground">{aliasNote}</span>}
+            <span className="truncate" title={record.model}>
+              {record.model}
+            </span>
+            {aliasNote && (
+              <span className="truncate text-xs text-muted-foreground" title={aliasNote}>
+                {aliasNote}
+              </span>
+            )}
           </div>
         </TableCell>
-        <TableCell className="text-muted-foreground">{record.provider || "-"}</TableCell>
-        <TableCell className="text-right font-mono tabular-nums">
+        <TableCell className="max-w-24 text-muted-foreground">
+          <span className="block truncate" title={record.provider || undefined}>
+            {record.provider || "-"}
+          </span>
+        </TableCell>
+        <TableCell className="w-32 text-right font-mono tabular-nums">
           <span className="text-muted-foreground">{formatTokens(record.input_tokens)}</span>
           {" / "}
           <span className="text-muted-foreground">{formatTokens(record.output_tokens)}</span>
@@ -638,10 +643,10 @@ function RecordRows({
             </div>
           )}
         </TableCell>
-        <TableCell className="whitespace-nowrap text-right font-mono tabular-nums">
+        <TableCell className="w-24 whitespace-nowrap text-right font-mono tabular-nums">
           <CostCell cost={cost} />
         </TableCell>
-        <TableCell className="whitespace-nowrap text-right font-mono tabular-nums">
+        <TableCell className="w-24 whitespace-nowrap text-right font-mono tabular-nums">
           <div>{formatDuration(record.latency_ms)}</div>
           {record.stream && record.ttft_ms > 0 && (
             <div className="text-xs text-muted-foreground">
@@ -650,13 +655,13 @@ function RecordRows({
             </div>
           )}
         </TableCell>
-        <TableCell className="font-mono text-xs text-muted-foreground">
-          <div className="flex items-center gap-1.5">
-            <span title={record.api_key || record.auth_id}>
+        <TableCell className="max-w-40 font-mono text-xs text-muted-foreground">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="min-w-0 truncate" title={record.api_key || record.auth_id || undefined}>
               {record.api_key ? maskApiKey(record.api_key) : record.auth_id || "-"}
             </span>
             {record.auth_index && (
-              <Badge variant="outline" className="font-mono text-[10px]">
+              <Badge variant="outline" className="shrink-0 font-mono text-[10px]">
                 #{record.auth_index}
               </Badge>
             )}
@@ -664,7 +669,7 @@ function RecordRows({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                className="text-muted-foreground hover:text-foreground"
+                className="shrink-0 text-muted-foreground hover:text-foreground"
                 title={t("records.row.copy_key")}
                 aria-label={t("records.row.copy_key")}
                 onClick={(event) => {

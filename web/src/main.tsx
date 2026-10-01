@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "@/App";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { FormatProvider } from "@/hooks/use-format";
 import { I18nProvider } from "@/i18n/context";
 import "./index.css";
 
@@ -26,12 +27,14 @@ createRoot(root).render(
   <StrictMode>
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <I18nProvider>
-        <QueryClientProvider client={queryClient}>
-          <TooltipProvider>
-            <App />
-            <Toaster position="top-center" />
-          </TooltipProvider>
-        </QueryClientProvider>
+        <FormatProvider>
+          <QueryClientProvider client={queryClient}>
+            <TooltipProvider>
+              <App />
+              <Toaster position="top-center" />
+            </TooltipProvider>
+          </QueryClientProvider>
+        </FormatProvider>
       </I18nProvider>
     </ThemeProvider>
   </StrictMode>,

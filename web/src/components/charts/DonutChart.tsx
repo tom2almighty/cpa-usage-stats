@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { Cell, Label, Pie, PieChart } from "recharts";
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { useFormat } from "@/hooks/use-format";
 import { useI18n } from "@/i18n/context";
-import { cn, formatNumber, formatTokens } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { GroupStat } from "@/types";
 
 interface DonutChartProps {
@@ -21,6 +22,7 @@ function sliceColor(index: number): string {
 /** Provider / Key 用量分布环形图，右侧为可悬停高亮的明细列表。 */
 export function DonutChart({ stats, metric, className }: DonutChartProps) {
   const { t } = useI18n();
+  const { formatNumber, formatTokens } = useFormat();
   const [active, setActive] = useState<number | null>(null);
 
   const slices = useMemo(() => {

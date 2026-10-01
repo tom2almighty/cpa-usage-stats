@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ChartColumn, KeyRound, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
+import { DisplaySettings } from "@/components/DisplaySettings";
 import { KeyDialog } from "@/components/KeyDialog";
 import { LanguageToggle } from "@/components/language-toggle";
 import { Logo } from "@/components/logo";
@@ -14,11 +15,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useFormat } from "@/hooks/use-format";
 import { useManagementKey } from "@/hooks/use-management-key";
 import { usePricing } from "@/hooks/use-pricing";
 import { useI18n } from "@/i18n/context";
 import { fetchOptions, fetchRecords, fetchSummary, keyFingerprint, UnauthorizedError } from "@/lib/api";
-import { cn, formatNumber } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { OptionsResponse, RecordListResponse, RecordsFilters, SummaryData, TabKey, TimeRange } from "@/types";
 
 const PAGE_SIZE = 15;
@@ -50,6 +52,7 @@ interface LoadResult {
 
 export function Dashboard() {
   const { t } = useI18n();
+  const { formatNumber } = useFormat();
   const { key, source, setKey, clear } = useManagementKey();
   const pricing = usePricing();
 
@@ -122,10 +125,17 @@ export function Dashboard() {
               setPage(1);
             }}
             aria-label={t("dashboard.range.label")}
-            className="max-w-full flex-wrap bg-muted p-0.75"
+            className="max-w-full flex-wrap bg-muted/60 p-0.75"
           >
             {RANGE_OPTIONS.map((value) => (
-              <ToggleGroupItem key={value} value={value} size="sm">
+              <ToggleGroupItem
+                key={value}
+                value={value}
+                size="sm"
+                // 轨道是 muted/60：未选中 hover 走基础样式的 bg-muted，
+                // 选中态必须用 ! 压过基础样式的 aria-pressed:bg-muted（同特异性、排序在后）
+                className="text-muted-foreground aria-pressed:bg-background! aria-pressed:text-foreground aria-pressed:shadow-sm"
+              >
                 {t(`dashboard.range.${value}`)}
               </ToggleGroupItem>
             ))}
@@ -188,6 +198,7 @@ export function Dashboard() {
             </TooltipContent>
           </Tooltip>
 
+          <DisplaySettings />
           <LanguageToggle />
           <ThemeToggle />
         </div>

@@ -91,7 +91,8 @@ cd web && bun run dev    # 单独调试前端
 ## 说明
 
 - 需要 CLIProxyAPI v8 管理 API（固定声明 RPC schema 6），不兼容旧版本。
-- 成本数据来自 [models.dev](https://github.com/anomalyco/models.dev) 列表价估算，仅供参考。
+- 成本数据来自 [models.dev](https://github.com/anomalyco/models.dev) 列表价估算，仅供参考。价格始终按「美元 / 100 万词元」存储。
+- 右上角「显示设置」可切换大数字的缩写单位（跟随语言 / 英文 K/M）与展示币种（USD / CNY）。选 CNY 需要自行填写汇率，看板不会联网获取；该设置只影响展示，不改动任何已记录的数据。
 
 ## LICENSE
 

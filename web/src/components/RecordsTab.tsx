@@ -22,7 +22,9 @@ import { Input } from "@/components/ui/input";
 import {
   Pagination,
   PaginationContent,
+  PaginationFirst,
   PaginationItem,
+  PaginationLast,
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
@@ -81,12 +83,19 @@ function FilterSelect({
   allLabel: string;
   className?: string;
 }) {
-  const items = [{ value: ALL_VALUE, label: allLabel }, ...options];
+  const hasSelected = Boolean(value) && value !== ALL_VALUE && !options.some((o) => o.value === value);
+  const items = [{ value: ALL_VALUE, label: allLabel }, ...(hasSelected ? [{ value, label: value }] : []), ...options];
   return (
     <Select
       items={items}
       value={value || ALL_VALUE}
-      onValueChange={(next) => onChange(next === ALL_VALUE ? "" : String(next))}
+      onValueChange={(next) => {
+        if (next === null || next === undefined || next === ALL_VALUE) {
+          onChange("");
+        } else {
+          onChange(String(next));
+        }
+      }}
     >
       <SelectTrigger className={className}>
         <SelectValue />
@@ -405,6 +414,22 @@ export function RecordsTab({
   const [keyword, setKeyword] = useState(filters.keyword);
   const [sessionId, setSessionId] = useState(filters.sessionId);
 
+  const [jumpPage, setJumpPage] = useState(String(page));
+
+  useEffect(() => {
+    setJumpPage(String(page));
+  }, [page]);
+
+  const handleJump = () => {
+    const target = Number.parseInt(jumpPage, 10);
+    if (!Number.isNaN(target) && target >= 1 && target <= totalPages) {
+      if (target !== page) {
+        onPageChange(target);
+      }
+    } else {
+      setJumpPage(String(page));
+    }
+  };
   useEffect(() => {
     if (keyword === filters.keyword) return;
     const timer = setTimeout(() => onFiltersChange({ ...filters, keyword: keyword.trim() }), 300);
@@ -595,37 +620,77 @@ export function RecordsTab({
         )}
 
         {total > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
             <span className="text-xs text-muted-foreground">
               {t("records.pagination.summary", { page, pages: totalPages, size: pageSize })}
             </span>
-            <Pagination className="mx-0 w-auto justify-end">
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    text={t("records.pagination.prev")}
-                    aria-label={t("records.pagination.prev")}
-                    aria-disabled={page <= 1}
-                    className={cn(page <= 1 && "pointer-events-none opacity-50")}
-                    onClick={() => page > 1 && onPageChange(page - 1)}
-                  />
-                </PaginationItem>
-                <PaginationItem>
-                  <span className="px-2 text-xs tabular-nums">
-                    {page} / {totalPages}
-                  </span>
-                </PaginationItem>
-                <PaginationItem>
-                  <PaginationNext
-                    text={t("records.pagination.next")}
-                    aria-label={t("records.pagination.next")}
-                    aria-disabled={page >= totalPages}
-                    className={cn(page >= totalPages && "pointer-events-none opacity-50")}
-                    onClick={() => page < totalPages && onPageChange(page + 1)}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span>{t("records.pagination.jump")}</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  value={jumpPage}
+                  onChange={(e) => setJumpPage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleJump();
+                    }
+                  }}
+                  onBlur={handleJump}
+                  className="h-7 w-14 px-1 text-center font-mono text-xs tabular-nums"
+                  aria-label={t("records.pagination.jump")}
+                />
+                <span>{t("records.pagination.page_unit")}</span>
+              </div>
+              <Pagination className="mx-0 w-auto justify-end">
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationFirst
+                      text={t("records.pagination.first")}
+                      aria-label={t("records.pagination.first")}
+                      aria-disabled={page <= 1}
+                      className={cn(page <= 1 && "pointer-events-none opacity-50")}
+                      onClick={() => page > 1 && onPageChange(1)}
+                    />
+                  </PaginationItem>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      text={t("records.pagination.prev")}
+                      aria-label={t("records.pagination.prev")}
+                      aria-disabled={page <= 1}
+                      className={cn(page <= 1 && "pointer-events-none opacity-50")}
+                      onClick={() => page > 1 && onPageChange(page - 1)}
+                    />
+                  </PaginationItem>
+                  <PaginationItem>
+                    <span className="px-2 font-mono text-xs tabular-nums">
+                      {page} / {totalPages}
+                    </span>
+                  </PaginationItem>
+                  <PaginationItem>
+                    <PaginationNext
+                      text={t("records.pagination.next")}
+                      aria-label={t("records.pagination.next")}
+                      aria-disabled={page >= totalPages}
+                      className={cn(page >= totalPages && "pointer-events-none opacity-50")}
+                      onClick={() => page < totalPages && onPageChange(page + 1)}
+                    />
+                  </PaginationItem>
+                  <PaginationItem>
+                    <PaginationLast
+                      text={t("records.pagination.last")}
+                      aria-label={t("records.pagination.last")}
+                      aria-disabled={page >= totalPages}
+                      className={cn(page >= totalPages && "pointer-events-none opacity-50")}
+                      onClick={() => page < totalPages && onPageChange(totalPages)}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
           </div>
         )}
       </CardContent>

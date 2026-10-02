@@ -7,6 +7,7 @@ import {
   CircleDollarSign,
   Clock,
   Copy,
+  Cpu,
   Database,
   Gauge,
   KeyRound,
@@ -22,6 +23,7 @@ import { useState } from "react";
 import { CustomPriceModal } from "@/components/CustomPriceModal";
 import { DonutChart } from "@/components/charts/DonutChart";
 import { LatencyBars } from "@/components/charts/LatencyBars";
+import { ModelBarChart, type ModelMetric } from "@/components/charts/ModelBarChart";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { FailurePanel } from "@/components/FailurePanel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -178,6 +180,124 @@ function useCopyFeedback() {
   };
   return { copied, copy };
 }
+/** Token 分布与构成：区分缓存、输入、输出、推理，横向排列与多段进度条展示 */
+function TokenDistribution({ summary, loading }: { summary: SummaryData | null; loading: boolean }) {
+  const { t } = useI18n();
+  const { formatTokens } = useFormat();
+
+  const cache = summary?.cache_read_tokens ?? 0;
+  const input = summary?.input_tokens ?? 0;
+  const totalOutput = summary?.output_tokens ?? 0;
+  const reasoning = summary?.reasoning_tokens ?? 0;
+  const output = Math.max(0, totalOutput - reasoning);
+
+  const total = cache + input + output + reasoning;
+
+  const items = [
+    {
+      key: "cache",
+      label: t("overview.tokens_dist.cache"),
+      count: cache,
+      percent: total > 0 ? (cache / total) * 100 : 0,
+      color: "bg-teal-500",
+      textColor: "text-teal-600 dark:text-teal-400",
+    },
+    {
+      key: "input",
+      label: t("overview.tokens_dist.input"),
+      count: input,
+      percent: total > 0 ? (input / total) * 100 : 0,
+      color: "bg-sky-500",
+      textColor: "text-sky-600 dark:text-sky-400",
+    },
+    {
+      key: "output",
+      label: t("overview.tokens_dist.output"),
+      count: output,
+      percent: total > 0 ? (output / total) * 100 : 0,
+      color: "bg-violet-500",
+      textColor: "text-violet-600 dark:text-violet-400",
+    },
+    {
+      key: "reasoning",
+      label: t("overview.tokens_dist.reasoning"),
+      count: reasoning,
+      percent: total > 0 ? (reasoning / total) * 100 : 0,
+      color: "bg-amber-500",
+      textColor: "text-amber-600 dark:text-amber-400",
+    },
+  ];
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Cpu className="size-4 text-muted-foreground" />
+            {t("overview.tokens_dist.title")}
+          </CardTitle>
+          <span className="font-mono text-xs text-muted-foreground">{formatTokens(total)}</span>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-2.5 w-full rounded-full" />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {items.map((it) => (
+                <Skeleton key={it.key} className="h-20 w-full rounded-lg" />
+              ))}
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* 顶部长条堆叠总进度条 */}
+            <div
+              className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-label={t("overview.tokens_dist.title")}
+            >
+              {items.map((it) => (
+                <div
+                  key={it.key}
+                  className={`h-full transition-all duration-300 ${it.color}`}
+                  style={{ width: `${it.percent}%` }}
+                  title={`${it.label}: ${formatTokens(it.count)} (${it.percent.toFixed(1)}%)`}
+                />
+              ))}
+            </div>
+
+            {/* 横向排列的各个项目，带进度条与百分比 */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {items.map((it) => (
+                <div key={it.key} className="flex flex-col justify-between rounded-lg border bg-muted/20 p-3">
+                  <div className="flex items-center justify-between gap-1 text-xs">
+                    <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
+                      <span className={`size-2 rounded-full ${it.color}`} />
+                      {it.label}
+                    </span>
+                    <span className={`font-mono text-xs font-semibold tabular-nums ${it.textColor}`}>
+                      {it.percent.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="mt-2 font-mono text-base font-semibold tabular-nums text-foreground">
+                    {formatTokens(it.count)}
+                  </div>
+                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${it.color}`}
+                      style={{ width: `${it.percent}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 /** 用量总览：KPI 指标条 + 趋势/Provider 分布 */
 export function OverviewSummary({ summary, loading, pricing }: OverviewSectionProps) {
@@ -305,6 +425,8 @@ export function OverviewSummary({ summary, loading, pricing }: OverviewSectionPr
           />
         </div>
       </div>
+      {/* Token 分布图 */}
+      <TokenDistribution summary={summary} loading={loading} />
 
       {dropped > 0 && (
         <Alert variant="destructive">
@@ -385,12 +507,45 @@ export function OverviewModels({ summary, loading, pricing }: OverviewSectionPro
   const [editing, setEditing] = useState<{ modelName: string; price: ModelPrice | null; isCustom: boolean } | null>(
     null,
   );
+  const [modelMetric, setModelMetric] = useState<ModelMetric>("tokens");
 
   const models = summary?.model_stats ?? [];
   const maxModelTokens = Math.max(1, ...models.map((model) => model.total_tokens));
 
   return (
     <div className="space-y-6">
+      {/* 宏观聚焦图表：Top 模型消耗排行，支持切换 Tokens / 请求数 / 预估费用 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <ChartColumn className="size-4 text-muted-foreground" />
+            {t("overview.models_chart.title")}
+          </CardTitle>
+          <CardAction>
+            <Tabs value={modelMetric} onValueChange={(v) => v && setModelMetric(v as ModelMetric)}>
+              <TabsList className="h-8">
+                <TabsTrigger value="tokens" className="px-2.5 text-xs">
+                  {t("overview.models_chart.tab_tokens")}
+                </TabsTrigger>
+                <TabsTrigger value="requests" className="px-2.5 text-xs">
+                  {t("overview.models_chart.tab_requests")}
+                </TabsTrigger>
+                <TabsTrigger value="cost" className="px-2.5 text-xs">
+                  {t("overview.models_chart.tab_cost")}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </CardAction>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <Skeleton className="h-64 w-full" />
+          ) : (
+            <ModelBarChart models={models} metric={modelMetric} pricingTable={pricing.table} />
+          )}
+        </CardContent>
+      </Card>
+
       <TableSection
         icon={<ChartColumn />}
         title={t("overview.models.title")}
@@ -555,9 +710,64 @@ export function OverviewCredentials({ summary, loading }: OverviewSectionProps) 
 
   const apiKeys = summary?.api_key_stats ?? [];
   const auths = summary?.auth_stats ?? [];
+  const [keyMetric, setKeyMetric] = useState<"total_tokens" | "requests">("total_tokens");
+  const [authMetric, setAuthMetric] = useState<"total_tokens" | "requests">("total_tokens");
 
   return (
     <div className="space-y-6">
+      {/* 宏观图表：客户端 Key 与上游凭据分布对比 */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <KeyRound className="size-4 text-muted-foreground" />
+              {t("overview.credentials_chart.keys_title")}
+            </CardTitle>
+            <CardAction>
+              <Tabs value={keyMetric} onValueChange={(v) => v && setKeyMetric(v as typeof keyMetric)}>
+                <TabsList className="h-7">
+                  <TabsTrigger value="total_tokens" className="px-2 text-xs">
+                    {t("overview.credentials_chart.tab_tokens")}
+                  </TabsTrigger>
+                  <TabsTrigger value="requests" className="px-2 text-xs">
+                    {t("overview.credentials_chart.tab_requests")}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            {loading ? <Skeleton className="h-56 w-full" /> : <DonutChart stats={apiKeys} metric={keyMetric} />}
+          </CardContent>
+        </Card>
+
+        {auths.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <ServerCog className="size-4 text-muted-foreground" />
+                {t("overview.credentials_chart.auths_title")}
+              </CardTitle>
+              <CardAction>
+                <Tabs value={authMetric} onValueChange={(v) => v && setAuthMetric(v as typeof authMetric)}>
+                  <TabsList className="h-7">
+                    <TabsTrigger value="total_tokens" className="px-2 text-xs">
+                      {t("overview.credentials_chart.tab_tokens")}
+                    </TabsTrigger>
+                    <TabsTrigger value="requests" className="px-2 text-xs">
+                      {t("overview.credentials_chart.tab_requests")}
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </CardAction>
+            </CardHeader>
+            <CardContent>
+              {loading ? <Skeleton className="h-56 w-full" /> : <DonutChart stats={auths} metric={authMetric} />}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
       {/* 客户端 Key 用量 */}
       <TableSection
         icon={<KeyRound />}

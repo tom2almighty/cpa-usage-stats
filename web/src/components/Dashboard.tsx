@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ChartColumn, KeyRound, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DisplaySettings } from "@/components/DisplaySettings";
@@ -72,6 +72,7 @@ export function Dashboard() {
     queryKey: ["usage", keyFingerprint(key), range, filters, page],
     enabled: Boolean(key),
     retry: (count, error) => !(error instanceof UnauthorizedError) && count < 2,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       // 先用 options 探测密钥：密钥错误时只消耗 1 次认证失败计数（CPA 连续 5 次失败封禁 IP 30 分钟）
       const options = await fetchOptions(key);

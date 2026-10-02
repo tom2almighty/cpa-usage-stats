@@ -107,6 +107,25 @@
       "percentiles": "P95 {{p95}} · P99 {{p99}}",
       "io_short": "in {{input}} / out {{output}}"
     },
+    "tokens_dist": {
+      "title": "Token Distribution",
+      "cache": "Cache Read",
+      "input": "Input",
+      "output": "Output",
+      "reasoning": "Reasoning"
+    },
+    "models_chart": {
+      "title": "Top Models Distribution",
+      "tab_tokens": "Tokens",
+      "tab_requests": "Requests",
+      "tab_cost": "Cost"
+    },
+    "credentials_chart": {
+      "keys_title": "API Key Distribution",
+      "auths_title": "Upstream Credential Distribution",
+      "tab_tokens": "Tokens",
+      "tab_requests": "Requests"
+    },
     "trend": {
       "hourly": "Hourly trend",
       "daily": "Daily trend",
@@ -293,8 +312,12 @@
     },
     "pagination": {
       "summary": "Page {{page}} / {{pages}} · {{size}} per page",
+      "first": "First",
       "prev": "Previous",
-      "next": "Next"
+      "next": "Next",
+      "last": "Last",
+      "jump": "Go to",
+      "page_unit": "page"
     }
   },
   "auth": {

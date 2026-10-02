@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Area, Bar, CartesianGrid, ComposedChart, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { useFormat } from "@/hooks/use-format";
 import { useI18n } from "@/i18n/context";
@@ -35,8 +35,9 @@ const VIEW_SERIES = {
 } as const satisfies Record<TrendChartProps["view"], readonly SeriesKey[]>;
 
 /**
- * 调用趋势：按 view 只画单一量纲（请求数堆叠柱 / 词元堆叠面积），单条左轴。
- * 容器、tooltip 走 shadcn chart；配色取自主题变量，深浅色自动跟随。
+ * 调用趋势：按 view 只画单一量纲（请求数 / 词元量），两条序列共用一条左轴。
+ * 两条都是曲线：堆叠面积把两种量混成一个色块，单序列之间也没法比较。
+ * 曲线不填充，靠色相区分；配色取自主题变量，深浅色自动跟随。
  */
 export function TrendChart({ points, hourly, view, className }: TrendChartProps) {
   const { t } = useI18n();
@@ -85,7 +86,7 @@ export function TrendChart({ points, hourly, view, className }: TrendChartProps)
   return (
     <div className={cn("space-y-1", className)}>
       <ChartContainer config={config} className="aspect-auto h-64 w-full">
-        <ComposedChart data={data} margin={{ left: 4, right: 4, top: 8, bottom: 0 }}>
+        <LineChart data={data} margin={{ left: 4, right: 4, top: 8, bottom: 0 }}>
           <CartesianGrid vertical={false} strokeDasharray="3 3" />
           <XAxis
             dataKey="bucket"
@@ -132,34 +133,18 @@ export function TrendChart({ points, hourly, view, className }: TrendChartProps)
               />
             }
           />
-          {view === "requests" ? (
-            <>
-              <Bar dataKey="success" stackId="view" fill={SERIES.success.color} radius={[2, 2, 0, 0]} />
-              <Bar dataKey="failed" stackId="view" fill={SERIES.failed.color} radius={[2, 2, 0, 0]} />
-            </>
-          ) : (
-            <>
-              <Area
-                dataKey="input"
-                type="monotone"
-                stackId="view"
-                stroke={SERIES.input.color}
-                fill={SERIES.input.color}
-                fillOpacity={0.45}
-                strokeWidth={1.6}
-              />
-              <Area
-                dataKey="output"
-                type="monotone"
-                stackId="view"
-                stroke={SERIES.output.color}
-                fill={SERIES.output.color}
-                fillOpacity={0.45}
-                strokeWidth={1.6}
-              />
-            </>
-          )}
-        </ComposedChart>
+          {activeKeys.map((key) => (
+            <Line
+              key={key}
+              dataKey={key}
+              type="monotone"
+              stroke={SERIES[key].color}
+              strokeWidth={1.8}
+              dot={false}
+              activeDot={{ r: 3, strokeWidth: 0 }}
+            />
+          ))}
+        </LineChart>
       </ChartContainer>
 
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">

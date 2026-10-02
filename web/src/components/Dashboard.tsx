@@ -276,15 +276,19 @@ export function Dashboard() {
           <OverviewSummary summary={summary} loading={loading} pricing={pricing} />
         </TabsContent>
 
-        <TabsContent value="models">
+        {/*
+          这三个页签的内容没有卡片外框（表格直接铺在页面上），
+          TabsContent 基类没有上下内边距，默认只剩 Tabs 根的 gap-2，和页签栏贴得太近。
+        */}
+        <TabsContent value="models" className="pt-4">
           <OverviewModels summary={summary} loading={loading} pricing={pricing} />
         </TabsContent>
 
-        <TabsContent value="credentials">
+        <TabsContent value="credentials" className="pt-4">
           <OverviewCredentials summary={summary} loading={loading} pricing={pricing} />
         </TabsContent>
 
-        <TabsContent value="diagnostics">
+        <TabsContent value="diagnostics" className="pt-4">
           <OverviewDiagnostics summary={summary} loading={loading} pricing={pricing} />
         </TabsContent>
 

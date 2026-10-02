@@ -3,13 +3,17 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  Coins,
   Copy,
+  Cpu,
   ExternalLink,
+  Hash,
   Layers,
   RotateCcw,
   Search,
+  SlidersHorizontal,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -98,17 +102,18 @@ function FilterSelect({
   );
 }
 
-/** 标签在上、值在下的单条详情。长值靠 break-all 换行，不做截断，保证完整可读。 */
+/** 单条字段：标签 + 值 + 复制。长值默认单行截断，完整内容交给原生 title。 */
 function DetailItem({
   label,
   value,
   href,
-  className,
+  badge,
 }: {
   label: string;
   value: string;
   href?: string;
-  className?: string;
+  /** 短枚举值（错误类型、模式等）用徽章呈现，和长 ID 拉开层次 */
+  badge?: boolean;
 }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
@@ -119,23 +124,32 @@ function DetailItem({
     setTimeout(() => setCopied(false), 1800);
   };
 
+  const text = value || "-";
+
   return (
-    // 表格单元格带 whitespace-nowrap，这里必须显式恢复正常换行，否则 break-all 不生效
-    <div className={cn("min-w-0 space-y-0.5 whitespace-normal", className)}>
+    // 表格单元格带 whitespace-nowrap，这里必须显式恢复正常换行，否则 truncate 不生效
+    <div className="min-w-0 space-y-1 whitespace-normal">
       <span className="block text-xs font-medium text-muted-foreground">{label}</span>
-      <div className="flex items-start gap-1 font-mono text-xs">
-        {href ? (
+      <div className="flex min-w-0 items-center gap-1 text-xs">
+        {badge ? (
+          <Badge variant="secondary" className="max-w-full font-mono font-normal">
+            <span className="truncate">{text}</span>
+          </Badge>
+        ) : href ? (
           <a
             href={href}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex min-w-0 items-start gap-1 hover:underline"
+            title={value}
+            className="inline-flex min-w-0 items-center gap-1 font-mono hover:underline"
           >
-            <span className="min-w-0 break-all">{value || "-"}</span>
-            <ExternalLink className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 truncate">{text}</span>
+            <ExternalLink className="size-3 shrink-0 text-muted-foreground" />
           </a>
         ) : (
-          <span className="min-w-0 break-all">{value || "-"}</span>
+          <span className="min-w-0 truncate font-mono" title={value || undefined}>
+            {text}
+          </span>
         )}
         {value && (
           <Button
@@ -150,6 +164,33 @@ function DetailItem({
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** 分区小标题：一条细线加标签，把展开区切成可扫读的几段。 */
+function SectionLabel({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-1.5 border-b pb-1.5 text-xs font-medium text-muted-foreground">
+      <span className="[&_svg]:size-3.5">{icon}</span>
+      {children}
+    </div>
+  );
+}
+
+/** 词元/费用统计块：标签在上、等宽数字在下，比串成一行的公式好扫读。 */
+function TokenStat({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
+  return (
+    <div className="space-y-0.5">
+      <span className="block text-xs text-muted-foreground">{label}</span>
+      <span
+        className={cn(
+          "block font-mono text-sm tabular-nums",
+          emphasis ? "font-semibold text-primary" : "text-foreground",
+        )}
+      >
+        {value}
+      </span>
     </div>
   );
 }
@@ -204,118 +245,142 @@ function DetailRow({ record, cost }: { record: StoredRecord; cost: RecordCost | 
   const { formatNumber, formatCost } = useFormat();
   const hasFailure = Boolean(record.failure_body) || Object.keys(record.response_headers ?? {}).length > 0;
 
+  // 三个 ID 是同构的长串，横排平铺会互相挤，单独一段纵向对齐后复制和比对都方便
+  const ids = [
+    { label: t("records.detail.request_id"), value: record.request_id },
+    { label: t("records.detail.trace_id"), value: record.trace_id },
+    { label: t("records.detail.session_id"), value: record.session_id },
+    ...(record.parent_session_id
+      ? [{ label: t("records.detail.parent_session"), value: record.parent_session_id }]
+      : []),
+  ];
+
   return (
     <TableRow className="bg-muted/40 hover:bg-muted/40">
-      <TableCell colSpan={9} className="space-y-3 p-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {/* 长值独占整行，换行显示完整内容，避免顶出格子挤占相邻字段 */}
-          <DetailItem className="col-span-full" label={t("records.detail.request_id")} value={record.request_id} />
-          <DetailItem className="col-span-full" label={t("records.detail.session_id")} value={record.session_id} />
-          <DetailItem
-            className="col-span-full"
-            label={t("records.detail.base_url")}
-            value={record.base_url}
-            href={record.base_url?.startsWith("http") ? record.base_url : undefined}
-          />
-          <DetailItem
-            className="col-span-full"
-            label={t("records.detail.auth")}
-            value={[record.auth_id, record.auth_index && `#${record.auth_index}`, record.auth_type]
-              .filter(Boolean)
-              .join(" · ")}
-          />
-          {/* 短字段仍按 2/3 列排布 */}
-          <DetailItem label={t("records.detail.trace_id")} value={record.trace_id} />
-          <DetailItem label={t("records.detail.source")} value={record.source} />
-          <DetailItem label={t("records.detail.reasoning_effort")} value={record.reasoning_effort} />
-          <DetailItem label={t("records.detail.executor")} value={record.executor_type} />
-          {record.parent_session_id && (
-            <DetailItem label={t("records.detail.parent_session")} value={record.parent_session_id} />
-          )}
-          {record.failed && record.error_type && (
-            <DetailItem label={t("records.detail.error_type")} value={record.error_type} />
-          )}
-          <DetailItem
-            label={t("records.detail.service_tier")}
-            value={
-              record.service_tier || record.response_service_tier
-                ? `${record.service_tier || "-"} → ${record.response_service_tier || "-"}`
-                : "-"
-            }
-          />
-          <DetailItem
-            label={t("records.detail.mode")}
-            value={[
-              record.stream ? t("records.detail.stream") : t("records.detail.non_stream"),
-              record.generate ? t("records.detail.generate") : t("records.detail.not_generate"),
-            ].join(" · ")}
-          />
-          <DetailItem
-            label={t("records.detail.pricing_source")}
-            value={
-              cost
-                ? `${cost.match.providerId}/${cost.match.modelId} (${cost.match.matchType})`
-                : t("records.detail.unmatched")
-            }
-          />
-          <div className="col-span-2 space-y-0.5 whitespace-normal">
-            <span className="block text-xs font-medium text-muted-foreground">{t("records.detail.tokens_detail")}</span>
-            <div className="font-mono text-xs break-words">
-              {t("records.detail.tokens_formula", {
-                input: formatNumber(record.input_tokens),
-                output: formatNumber(record.output_tokens),
-              })}
-              {record.reasoning_tokens > 0 &&
-                t("records.detail.tokens_reasoning", { value: formatNumber(record.reasoning_tokens) })}
-              {record.cache_read_tokens > 0 &&
-                t("records.detail.tokens_cache_read", { value: formatNumber(record.cache_read_tokens) })}
-              {record.cache_creation_tokens > 0 &&
-                t("records.detail.tokens_cache_write", { value: formatNumber(record.cache_creation_tokens) })}
-              <span className="font-semibold">
-                {t("records.detail.tokens_total", { value: formatNumber(record.total_tokens) })}
-              </span>
-              {cost && (
-                <span className="ml-2 font-semibold text-primary">
-                  {t("records.detail.estimate", { value: formatCost(cost.cost) })}
-                </span>
+      <TableCell colSpan={9} className="whitespace-normal p-0">
+        <div className="space-y-4 border-l-2 border-primary/30 px-4 py-3">
+          <section className="space-y-2">
+            <SectionLabel icon={<Hash />}>{t("records.detail.section_ids")}</SectionLabel>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {ids.map((item) => (
+                <DetailItem key={item.label} label={item.label} value={item.value} />
+              ))}
+            </div>
+          </section>
+
+          <section className="space-y-2">
+            <SectionLabel icon={<Cpu />}>{t("records.detail.section_route")}</SectionLabel>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <DetailItem
+                label={t("records.detail.base_url")}
+                value={record.base_url}
+                href={record.base_url?.startsWith("http") ? record.base_url : undefined}
+              />
+              <DetailItem
+                label={t("records.detail.auth")}
+                value={[record.auth_id, record.auth_index && `#${record.auth_index}`, record.auth_type]
+                  .filter(Boolean)
+                  .join(" · ")}
+              />
+              <DetailItem label={t("records.detail.executor")} value={record.executor_type} />
+              <DetailItem
+                label={t("records.detail.pricing_source")}
+                value={
+                  cost
+                    ? `${cost.match.providerId}/${cost.match.modelId} (${cost.match.matchType})`
+                    : t("records.detail.unmatched")
+                }
+              />
+            </div>
+          </section>
+
+          <section className="space-y-2">
+            <SectionLabel icon={<SlidersHorizontal />}>{t("records.detail.section_params")}</SectionLabel>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <DetailItem label={t("records.detail.source")} value={record.source} />
+              <DetailItem label={t("records.detail.reasoning_effort")} value={record.reasoning_effort} />
+              <DetailItem
+                label={t("records.detail.service_tier")}
+                value={
+                  record.service_tier || record.response_service_tier
+                    ? `${record.service_tier || "-"} → ${record.response_service_tier || "-"}`
+                    : "-"
+                }
+              />
+              <DetailItem
+                label={t("records.detail.mode")}
+                value={[
+                  record.stream ? t("records.detail.stream") : t("records.detail.non_stream"),
+                  record.generate ? t("records.detail.generate") : t("records.detail.not_generate"),
+                ].join(" · ")}
+              />
+              {record.failed && record.error_type && (
+                <DetailItem badge label={t("records.detail.error_type")} value={record.error_type} />
               )}
             </div>
-          </div>
-        </div>
+          </section>
 
-        {hasFailure && (
-          <div className="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-            <div className="flex items-center gap-1.5 text-xs font-medium text-destructive">
-              <AlertCircle className="size-4" />
-              {t("records.detail.failure_title", { status: record.status_code || 500 })}
+          <section className="space-y-2">
+            <SectionLabel icon={<Coins />}>{t("records.detail.tokens_detail")}</SectionLabel>
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
+              <TokenStat label={t("records.detail.token_input")} value={formatNumber(record.input_tokens)} />
+              <TokenStat label={t("records.detail.token_output")} value={formatNumber(record.output_tokens)} />
+              {record.reasoning_tokens > 0 && (
+                <TokenStat label={t("records.detail.token_reasoning")} value={formatNumber(record.reasoning_tokens)} />
+              )}
+              {record.cache_read_tokens > 0 && (
+                <TokenStat
+                  label={t("records.detail.token_cache_read")}
+                  value={formatNumber(record.cache_read_tokens)}
+                />
+              )}
+              {record.cache_creation_tokens > 0 && (
+                <TokenStat
+                  label={t("records.detail.token_cache_write")}
+                  value={formatNumber(record.cache_creation_tokens)}
+                />
+              )}
+              <TokenStat label={t("records.detail.token_total")} value={formatNumber(record.total_tokens)} emphasis />
+              {cost && <TokenStat label={t("records.detail.estimate_label")} value={formatCost(cost.cost)} emphasis />}
             </div>
-            {record.failure_body && (
-              <div className="space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">{t("records.detail.failure_body")}</span>
-                <pre className="max-h-56 overflow-auto rounded-md bg-background p-2.5 font-mono text-xs">
-                  {record.failure_body}
-                </pre>
+          </section>
+
+          {hasFailure && (
+            <section className="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-destructive">
+                <AlertCircle className="size-4" />
+                {t("records.detail.failure_title", { status: record.status_code || 500 })}
               </div>
-            )}
-            {record.response_headers && Object.keys(record.response_headers).length > 0 && (
-              <div className="space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">{t("records.detail.failure_headers")}</span>
-                <div className="flex flex-wrap gap-1.5 font-mono text-xs">
-                  {Object.entries(record.response_headers).map(([name, values]) => (
-                    // 表格基类带 whitespace-nowrap，这里必须显式复位，否则单个超长 header 值会撑出 chip
-                    <span
-                      key={name}
-                      className="inline-flex max-w-full min-w-0 items-baseline gap-1 whitespace-normal rounded-md border bg-background px-2 py-0.5"
-                    >
-                      <span className="shrink-0 font-semibold">{name}:</span>
-                      <span className="min-w-0 break-all text-muted-foreground">{values.join(", ")}</span>
-                    </span>
-                  ))}
+              {record.failure_body && (
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">{t("records.detail.failure_body")}</span>
+                  <pre className="max-h-56 overflow-auto rounded-md bg-background p-2.5 font-mono text-xs">
+                    {record.failure_body}
+                  </pre>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+              {record.response_headers && Object.keys(record.response_headers).length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {t("records.detail.failure_headers")}
+                  </span>
+                  <div className="flex flex-wrap gap-1.5 font-mono text-xs">
+                    {Object.entries(record.response_headers).map(([name, values]) => (
+                      // 表格基类带 whitespace-nowrap，这里必须显式复位，否则单个超长 header 值会撑出 chip
+                      <span
+                        key={name}
+                        className="inline-flex max-w-full min-w-0 items-baseline gap-1 whitespace-normal rounded-md border bg-background px-2 py-0.5"
+                      >
+                        <span className="shrink-0 font-semibold">{name}:</span>
+                        <span className="min-w-0 break-all text-muted-foreground">{values.join(", ")}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+        </div>
       </TableCell>
     </TableRow>
   );
@@ -609,10 +674,15 @@ function RecordRows({
           event.preventDefault();
           onToggle();
         }}
-        className="cursor-pointer"
+        className="group/row cursor-pointer aria-expanded:bg-muted/50"
       >
         <TableCell className="text-muted-foreground">
-          <ChevronDown className={cn("size-3.5 transition-transform", expanded && "rotate-180")} />
+          <ChevronDown
+            className={cn(
+              "size-3.5 transition-transform duration-200",
+              expanded ? "rotate-180" : "opacity-60 group-hover/row:opacity-100",
+            )}
+          />
         </TableCell>
         <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
           {formatDateTime(record.requested_at)}

@@ -45,8 +45,8 @@ plugins:
       channel_size: 10000                         # 内存队列容量，写满会丢弃新记录
       retention_days: 90                          # 历史保留天数，0 为永久
       exclude_models: []                          # 不记录的模型或别名
-      dashboard_path: "/dashboard" # 看板资源路径
-      dashboard_title: "用量统计看板" # 管理中心菜单名称
+      dashboard_path: "/dashboard"                # 看板资源路径
+      dashboard_title: "用量统计看板"              # 管理中心菜单名称
 ```
 
 打开看板：在管理中心插件列表点击「用量统计看板」，或直接访问：
@@ -73,8 +73,8 @@ http://127.0.0.1:8317/v0/resource/plugins/cpa-usage-stats/dashboard
 - Bun 1.4+
 
 ```bash
-./build.sh          # 打包前端并编译 CGO 动态库
-go test ./...       # 后端测试
+./build.sh               # 打包前端并编译 CGO 动态库
+go test ./...            # 后端测试
 cd web && bun run dev    # 单独调试前端
 ```
 
@@ -91,8 +91,7 @@ cd web && bun run dev    # 单独调试前端
 ## 说明
 
 - 需要 CLIProxyAPI v8 管理 API（固定声明 RPC schema 6），不兼容旧版本。
-- 成本数据来自 [models.dev](https://github.com/anomalyco/models.dev) 列表价估算，仅供参考。价格始终按「美元 / 100 万词元」存储。
-- 右上角「显示设置」可切换大数字的缩写单位（跟随语言 / 英文 K/M）与展示币种（USD / CNY）。选 CNY 需要自行填写汇率，看板不会联网获取；该设置只影响展示，不改动任何已记录的数据。
+- 成本数据来自 [models.dev](https://github.com/anomalyco/models.dev) 仅供参考。
 
 ## LICENSE
 

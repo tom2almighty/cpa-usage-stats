@@ -1,9 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="CPA Usage Stats">
-  <rect width="256" height="256" rx="56" fill="#18181b" />
-  <g fill="#fafafa">
-    <rect x="57" y="140" width="25" height="60" rx="7" />
-    <rect x="96" y="112" width="25" height="88" rx="7" />
-    <rect x="135" y="84" width="25" height="116" rx="7" />
-    <rect x="174" y="56" width="25" height="144" rx="7" />
-  </g>
+  <rect width="256" height="256" rx="56" fill="#2a78d6" />
+  <path d="M64 176V128M106.4 176V88M149.6 176V112M192 176V72" stroke="#fff" stroke-width="24" stroke-linecap="round" fill="none" />
 </svg>

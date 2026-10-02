@@ -53,6 +53,9 @@
     },
     "tabs": {
       "overview": "Overview",
+      "models": "Models",
+      "credentials": "Credentials",
+      "diagnostics": "Diagnostics",
       "records": "Records"
     },
     "load_failed": "Failed to load data: {{message}}",
@@ -149,7 +152,7 @@
       "empty": "No key data",
       "copy_key": "Copy full key",
       "th": {
-        "key": "API key (masked)",
+        "key": "API key",
         "requests": "Requests",
         "failed": "Failed",
         "tokens": "Total tokens",
@@ -189,7 +192,7 @@
   "pricing": {
     "source": "Pricing source",
     "provider_name": "models.dev",
-    "standard_note": "list prices",
+    "fetch": "Fetch prices",
     "loading": "Updating model prices…",
     "failed": "Failed to fetch prices: {{message}}",
     "refresh_title": "Re-fetch the latest model prices from models.dev",

@@ -53,6 +53,9 @@
     },
     "tabs": {
       "overview": "用量总览",
+      "models": "模型用量",
+      "credentials": "凭据用量",
+      "diagnostics": "诊断",
       "records": "调用明细"
     },
     "load_failed": "数据加载失败：{{message}}",
@@ -149,7 +152,7 @@
       "empty": "暂无 Key 数据",
       "copy_key": "复制完整 Key",
       "th": {
-        "key": "API Key（已脱敏）",
+        "key": "API Key",
         "requests": "请求数",
         "failed": "失败数",
         "tokens": "总词元",
@@ -189,7 +192,7 @@
   "pricing": {
     "source": "价格数据源",
     "provider_name": "models.dev",
-    "standard_note": "标准价折算",
+    "fetch": "拉取价格",
     "loading": "模型价格更新中…",
     "failed": "价格获取失败：{{message}}",
     "refresh_title": "从 models.dev 重新拉取最新模型价格",

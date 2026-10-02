@@ -40,6 +40,11 @@ export function maskApiKey(key: string): string {
   return `${trimmed.slice(0, 4)}••••${trimmed.slice(-3)}`;
 }
 
+/** 上游凭据展示名：去掉 CPA 凭据文件名的 .json 后缀，账号部分才是辨识信息 */
+export function displayAuthName(name: string): string {
+  return name.replace(/\.json$/i, "");
+}
+
 /**
  * 复制到系统剪贴板。看板运行在管理中心的 iframe 里，某些环境下
  * Clipboard API 不可用，这里退回 textarea + execCommand。

@@ -98,7 +98,18 @@ function FilterSelect({
   );
 }
 
-function DetailItem({ label, value, href }: { label: string; value: string; href?: string }) {
+/** 标签在上、值在下的单条详情。长值靠 break-all 换行，不做截断，保证完整可读。 */
+function DetailItem({
+  label,
+  value,
+  href,
+  className,
+}: {
+  label: string;
+  value: string;
+  href?: string;
+  className?: string;
+}) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
 
@@ -109,18 +120,19 @@ function DetailItem({ label, value, href }: { label: string; value: string; href
   };
 
   return (
-    <div className="min-w-0 space-y-0.5">
+    // 表格单元格带 whitespace-nowrap，这里必须显式恢复正常换行，否则 break-all 不生效
+    <div className={cn("min-w-0 space-y-0.5 whitespace-normal", className)}>
       <span className="block text-xs font-medium text-muted-foreground">{label}</span>
-      <div className="flex items-center gap-1 font-mono text-xs">
+      <div className="flex items-start gap-1 font-mono text-xs">
         {href ? (
           <a
             href={href}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex min-w-0 items-center gap-1 hover:underline"
+            className="inline-flex min-w-0 items-start gap-1 hover:underline"
           >
-            <span className="truncate">{value || "-"}</span>
-            <ExternalLink className="size-3 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 break-all">{value || "-"}</span>
+            <ExternalLink className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
           </a>
         ) : (
           <span className="min-w-0 break-all">{value || "-"}</span>
@@ -196,21 +208,25 @@ function DetailRow({ record, cost }: { record: StoredRecord; cost: RecordCost | 
     <TableRow className="bg-muted/40 hover:bg-muted/40">
       <TableCell colSpan={9} className="space-y-3 p-4">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <DetailItem label={t("records.detail.request_id")} value={record.request_id} />
-          <DetailItem label={t("records.detail.trace_id")} value={record.trace_id} />
-          <DetailItem label={t("records.detail.session_id")} value={record.session_id} />
-          <DetailItem label={t("records.detail.source")} value={record.source} />
+          {/* 长值独占整行，换行显示完整内容，避免顶出格子挤占相邻字段 */}
+          <DetailItem className="col-span-full" label={t("records.detail.request_id")} value={record.request_id} />
+          <DetailItem className="col-span-full" label={t("records.detail.session_id")} value={record.session_id} />
           <DetailItem
+            className="col-span-full"
             label={t("records.detail.base_url")}
             value={record.base_url}
             href={record.base_url?.startsWith("http") ? record.base_url : undefined}
           />
           <DetailItem
+            className="col-span-full"
             label={t("records.detail.auth")}
             value={[record.auth_id, record.auth_index && `#${record.auth_index}`, record.auth_type]
               .filter(Boolean)
               .join(" · ")}
           />
+          {/* 短字段仍按 2/3 列排布 */}
+          <DetailItem label={t("records.detail.trace_id")} value={record.trace_id} />
+          <DetailItem label={t("records.detail.source")} value={record.source} />
           <DetailItem label={t("records.detail.reasoning_effort")} value={record.reasoning_effort} />
           <DetailItem label={t("records.detail.executor")} value={record.executor_type} />
           {record.parent_session_id && (
@@ -242,9 +258,9 @@ function DetailRow({ record, cost }: { record: StoredRecord; cost: RecordCost | 
                 : t("records.detail.unmatched")
             }
           />
-          <div className="col-span-2 space-y-0.5">
+          <div className="col-span-2 space-y-0.5 whitespace-normal">
             <span className="block text-xs font-medium text-muted-foreground">{t("records.detail.tokens_detail")}</span>
-            <div className="font-mono text-xs">
+            <div className="font-mono text-xs break-words">
               {t("records.detail.tokens_formula", {
                 input: formatNumber(record.input_tokens),
                 output: formatNumber(record.output_tokens),
@@ -286,12 +302,13 @@ function DetailRow({ record, cost }: { record: StoredRecord; cost: RecordCost | 
                 <span className="text-xs font-medium text-muted-foreground">{t("records.detail.failure_headers")}</span>
                 <div className="flex flex-wrap gap-1.5 font-mono text-xs">
                   {Object.entries(record.response_headers).map(([name, values]) => (
+                    // 表格基类带 whitespace-nowrap，这里必须显式复位，否则单个超长 header 值会撑出 chip
                     <span
                       key={name}
-                      className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-0.5"
+                      className="inline-flex max-w-full min-w-0 items-baseline gap-1 whitespace-normal rounded-md border bg-background px-2 py-0.5"
                     >
-                      <span className="font-semibold">{name}:</span>
-                      <span className="text-muted-foreground">{values.join(", ")}</span>
+                      <span className="shrink-0 font-semibold">{name}:</span>
+                      <span className="min-w-0 break-all text-muted-foreground">{values.join(", ")}</span>
                     </span>
                   ))}
                 </div>

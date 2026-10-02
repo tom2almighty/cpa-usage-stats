@@ -5,7 +5,7 @@ import { DisplaySettings } from "@/components/DisplaySettings";
 import { KeyDialog } from "@/components/KeyDialog";
 import { LanguageToggle } from "@/components/language-toggle";
 import { Logo } from "@/components/logo";
-import { OverviewTab } from "@/components/OverviewTab";
+import { OverviewCredentials, OverviewDiagnostics, OverviewModels, OverviewSummary } from "@/components/OverviewTab";
 import { PricingSource } from "@/components/PricingSource";
 import { RecordsTab } from "@/components/RecordsTab";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -21,7 +21,10 @@ import { usePricing } from "@/hooks/use-pricing";
 import { useI18n } from "@/i18n/context";
 import { fetchOptions, fetchRecords, fetchSummary, keyFingerprint, UnauthorizedError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { OptionsResponse, RecordListResponse, RecordsFilters, SummaryData, TabKey, TimeRange } from "@/types";
+import type { OptionsResponse, RecordListResponse, RecordsFilters, SummaryData, TimeRange } from "@/types";
+
+/** 概览拆成多页签后的页签值；@/types 里的 TabKey 只有 overview/records 两态，已不适用 */
+type TabKey = "overview" | "models" | "credentials" | "diagnostics" | "records";
 
 const PAGE_SIZE = 15;
 
@@ -180,13 +183,13 @@ export function Dashboard() {
                 />
               }
             >
-              <KeyRound className="size-3.5" />
               <span
                 className={cn(
                   "size-1.5 rounded-full",
-                  key ? (unauthorized ? "bg-destructive" : "bg-chart-2") : "bg-muted-foreground",
+                  key ? (unauthorized ? "bg-destructive" : "bg-success") : "bg-muted-foreground",
                 )}
               />
+              <KeyRound className="size-3.5" />
               {t("dashboard.key.action")}
             </TooltipTrigger>
             <TooltipContent>
@@ -238,9 +241,26 @@ export function Dashboard() {
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as TabKey)}>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <TabsList>
-            <TabsTrigger value="overview">{t("dashboard.tabs.overview")}</TabsTrigger>
-            <TabsTrigger value="records">{t("dashboard.tabs.records")}</TabsTrigger>
+          {/*
+            窄屏下 5 个页签放不进一行：让列表换行（h-auto 覆盖基础样式的固定 h-8），
+            并给触发器一个确定高度，替代依赖父级高度的 h-[calc(100%-1px)]。
+          */}
+          <TabsList className="flex-wrap group-data-horizontal/tabs:h-auto">
+            <TabsTrigger value="overview" className="h-6.5">
+              {t("dashboard.tabs.overview")}
+            </TabsTrigger>
+            <TabsTrigger value="models" className="h-6.5">
+              {t("dashboard.tabs.models")}
+            </TabsTrigger>
+            <TabsTrigger value="credentials" className="h-6.5">
+              {t("dashboard.tabs.credentials")}
+            </TabsTrigger>
+            <TabsTrigger value="diagnostics" className="h-6.5">
+              {t("dashboard.tabs.diagnostics")}
+            </TabsTrigger>
+            <TabsTrigger value="records" className="h-6.5">
+              {t("dashboard.tabs.records")}
+            </TabsTrigger>
           </TabsList>
           <PricingSource pricing={pricing} />
         </div>
@@ -253,7 +273,19 @@ export function Dashboard() {
               <AlertDescription>{t("dashboard.empty.desc")}</AlertDescription>
             </Alert>
           )}
-          <OverviewTab summary={summary} loading={loading} pricing={pricing} />
+          <OverviewSummary summary={summary} loading={loading} pricing={pricing} />
+        </TabsContent>
+
+        <TabsContent value="models">
+          <OverviewModels summary={summary} loading={loading} pricing={pricing} />
+        </TabsContent>
+
+        <TabsContent value="credentials">
+          <OverviewCredentials summary={summary} loading={loading} pricing={pricing} />
+        </TabsContent>
+
+        <TabsContent value="diagnostics">
+          <OverviewDiagnostics summary={summary} loading={loading} pricing={pricing} />
         </TabsContent>
 
         <TabsContent value="records">

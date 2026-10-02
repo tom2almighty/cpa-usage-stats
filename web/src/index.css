@@ -36,6 +36,12 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -78,6 +84,14 @@
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
+  /* 语义状态色。亮色下取深一档，既能当文字（对白底 ≥5.1:1）也能当进度条填充；
+     foreground 对 token 自身 ≥4.9:1 */
+  --success: oklch(0.52 0.15 152);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.55 0.16 60);
+  --warning-foreground: oklch(0.985 0 0);
+  --info: oklch(0.53 0.14 240);
+  --info-foreground: oklch(0.985 0 0);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
@@ -112,6 +126,13 @@
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
+  /* 暗色下取亮一档，前景色反过来用近黑：token 对深底 ≥8.2:1，foreground 对 token 同样 ≥8.2:1 */
+  --success: oklch(0.78 0.16 155);
+  --success-foreground: oklch(0.205 0 0);
+  --warning: oklch(0.83 0.17 80);
+  --warning-foreground: oklch(0.205 0 0);
+  --info: oklch(0.75 0.15 235);
+  --info-foreground: oklch(0.205 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);

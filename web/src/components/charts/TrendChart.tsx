@@ -22,7 +22,7 @@ interface TrendChartProps {
 const SERIES = {
   success: { labelKey: "overview.trend.requests_ok", color: "var(--chart-1)" },
   failed: { labelKey: "overview.trend.failed_requests", color: "var(--destructive)" },
-  input: { labelKey: "overview.trend.input_label", color: "var(--chart-3)" },
+  input: { labelKey: "overview.trend.input_label", color: "var(--chart-1)" },
   output: { labelKey: "overview.trend.output_label", color: "var(--chart-2)" },
 } as const;
 
@@ -95,8 +95,10 @@ export function TrendChart({ points, hourly, view, className }: TrendChartProps)
             minTickGap={24}
             tickFormatter={(value: string) => formatBucket(value, hourly)}
           />
-          {/* 轴一律用紧凑单位：精确数字（1,234,567）会超出 44px 轴宽，精确值留给 tooltip */}
-          <YAxis tickLine={false} axisLine={false} tickMargin={6} width={44} tickFormatter={formatTokens} />
+          {/* 轴一律用紧凑单位：精确数字（1,234,567）会超出轴宽，精确值留给 tooltip */}
+          {/* 56px 是按中文 compact 的最坏刻度定的："1000万" 约 41px + 6px tickMargin，
+              原来的 44px 会被卡片裁掉；英文单位下最坏 "123.46M" 约 49px 也装得下 */}
+          <YAxis tickLine={false} axisLine={false} tickMargin={6} width={56} tickFormatter={formatTokens} />
           <ChartTooltip
             content={
               <ChartTooltipContent
@@ -143,7 +145,7 @@ export function TrendChart({ points, hourly, view, className }: TrendChartProps)
                 stackId="view"
                 stroke={SERIES.input.color}
                 fill={SERIES.input.color}
-                fillOpacity={0.25}
+                fillOpacity={0.45}
                 strokeWidth={1.6}
               />
               <Area
@@ -152,7 +154,7 @@ export function TrendChart({ points, hourly, view, className }: TrendChartProps)
                 stackId="view"
                 stroke={SERIES.output.color}
                 fill={SERIES.output.color}
-                fillOpacity={0.25}
+                fillOpacity={0.45}
                 strokeWidth={1.6}
               />
             </>

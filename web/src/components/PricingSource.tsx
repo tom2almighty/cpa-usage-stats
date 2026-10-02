@@ -35,7 +35,6 @@ export function PricingSource({ pricing }: { pricing: PricingState }) {
         <span>
           {t("pricing.source")} <span className="font-medium text-foreground">{t("pricing.provider_name")}</span>
           {updatedAt && ` · ${updatedAt}`}
-          <span className="hidden sm:inline"> · {t("pricing.standard_note")}</span>
         </span>
       )}
       <Button
@@ -47,7 +46,7 @@ export function PricingSource({ pricing }: { pricing: PricingState }) {
         className="gap-1 text-muted-foreground hover:text-foreground"
       >
         <RefreshCw className={loading ? "animate-spin" : undefined} />
-        {t("common.refresh")}
+        {t("pricing.fetch")}
       </Button>
     </div>
   );

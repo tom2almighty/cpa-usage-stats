@@ -129,8 +129,6 @@ export interface RuntimeStats {
 
 export type TimeRange = "today" | "yesterday" | "7d" | "30d" | "all";
 
-export type TabKey = "overview" | "records";
-
 export interface RecordsFilters {
   model: string;
   provider: string;

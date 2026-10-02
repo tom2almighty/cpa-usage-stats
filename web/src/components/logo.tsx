@@ -1,17 +1,12 @@
 /**
- * 插件 logo。与 assets/logo.svg、插件元数据里的 Logo 同源：
- * 深色底 + 柱状图形，保证看板标题与管理中心插件卡片视觉一致。
+ * 插件 logo：与 cpa-dashboard 面板同一套图形（蓝色圆角方块 + 四根白色圆头柱）。
+ * assets/logo.svg 与 web/index.html 的 favicon 是同一图形的放大/编码版本，改这里记得三处同步。
  */
 export function Logo({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 256 256" role="img" aria-hidden className={className}>
-      <rect width="256" height="256" rx="56" fill="currentColor" />
-      <g fill="var(--background)">
-        <rect x="57" y="140" width="25" height="60" rx="7" />
-        <rect x="96" y="112" width="25" height="88" rx="7" />
-        <rect x="135" y="84" width="25" height="116" rx="7" />
-        <rect x="174" y="56" width="25" height="144" rx="7" />
-      </g>
+    <svg viewBox="0 0 32 32" fill="none" aria-hidden className={className}>
+      <rect width="32" height="32" rx="7" fill="#2a78d6" />
+      <path d="M8 22V16M13.3 22V11M18.7 22V14M24 22V9" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
     </svg>
   );
 }

@@ -35,7 +35,7 @@ import { useFormat } from "@/hooks/use-format";
 import type { PricingState } from "@/hooks/use-pricing";
 import { useI18n } from "@/i18n/context";
 import { groupCostDetails, type ModelPrice, type PriceMatch, totalCost } from "@/lib/pricing";
-import { copyToClipboard, formatDuration, formatPercent, maskApiKey } from "@/lib/utils";
+import { copyToClipboard, displayAuthName, formatDuration, formatPercent, maskApiKey } from "@/lib/utils";
 import type { SummaryData } from "@/types";
 
 const MODEL_SKELETON_ROWS = ["model-a", "model-b", "model-c", "model-d"];
@@ -43,7 +43,8 @@ const KEY_SKELETON_ROWS = ["key-a", "key-b", "key-c"];
 
 type TrendView = "requests" | "tokens";
 
-interface OverviewTabProps {
+/** 概览拆成多个页签后，每块内容都吃同一份 summary，由 Dashboard 按页签分发。 */
+interface OverviewSectionProps {
   summary: SummaryData | null;
   loading: boolean;
   pricing: PricingState;
@@ -167,29 +168,27 @@ function PriceCell({ match, onEdit }: { match?: PriceMatch | null; onEdit: () =>
   );
 }
 
-export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
+/** 复制按钮的短暂反馈：1.8s 后恢复默认图标 */
+function useCopyFeedback() {
+  const [copied, setCopied] = useState<string | null>(null);
+  const copy = async (value: string) => {
+    if (!(await copyToClipboard(value))) return;
+    setCopied(value);
+    setTimeout(() => setCopied(null), 1800);
+  };
+  return { copied, copy };
+}
+
+/** 用量总览：KPI 指标条 + 趋势/Provider 分布 */
+export function OverviewSummary({ summary, loading, pricing }: OverviewSectionProps) {
   const { t } = useI18n();
   const { formatNumber, formatTokens, formatCost } = useFormat();
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [trendView, setTrendView] = useState<TrendView>("requests");
-  const [editing, setEditing] = useState<{ modelName: string; price: ModelPrice | null; isCustom: boolean } | null>(
-    null,
-  );
 
   const models = summary?.model_stats ?? [];
-  const apiKeys = summary?.api_key_stats ?? [];
-  const auths = summary?.auth_stats ?? [];
-  const sessions = summary?.session_stats ?? [];
-  const maxModelTokens = Math.max(1, ...models.map((model) => model.total_tokens));
   const hourly = summary?.bucket === "hour";
   const costs = totalCost(pricing.table, models);
   const dropped = summary?.dropped_records ?? 0;
-
-  const handleCopy = async (key: string) => {
-    if (!(await copyToClipboard(key))) return;
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey(null), 1800);
-  };
 
   return (
     <div className="space-y-6">
@@ -375,8 +374,23 @@ export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
 
-      {/* 模型排行 */}
+/** 模型用量：模型排行表 + 改价弹窗（改价状态跟着这张表走） */
+export function OverviewModels({ summary, loading, pricing }: OverviewSectionProps) {
+  const { t } = useI18n();
+  const { formatNumber, formatTokens, formatCost } = useFormat();
+  const [editing, setEditing] = useState<{ modelName: string; price: ModelPrice | null; isCustom: boolean } | null>(
+    null,
+  );
+
+  const models = summary?.model_stats ?? [];
+  const maxModelTokens = Math.max(1, ...models.map((model) => model.total_tokens));
+
+  return (
+    <div className="space-y-6">
       <TableSection
         icon={<ChartColumn />}
         title={t("overview.models.title")}
@@ -519,6 +533,31 @@ export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
         </Table>
       </TableSection>
 
+      {editing && (
+        <CustomPriceModal
+          open
+          modelName={editing.modelName}
+          currentPrice={editing.price}
+          isCustom={editing.isCustom}
+          onClose={() => setEditing(null)}
+          onSaved={pricing.reload}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 凭据用量：客户端 Key 用量 + 上游凭据用量 */
+export function OverviewCredentials({ summary, loading }: OverviewSectionProps) {
+  const { t } = useI18n();
+  const { formatNumber, formatTokens } = useFormat();
+  const { copied, copy } = useCopyFeedback();
+
+  const apiKeys = summary?.api_key_stats ?? [];
+  const auths = summary?.auth_stats ?? [];
+
+  return (
+    <div className="space-y-6">
       {/* 客户端 Key 用量 */}
       <TableSection
         icon={<KeyRound />}
@@ -565,9 +604,9 @@ export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
                           className="shrink-0 text-muted-foreground hover:text-foreground"
                           title={t("overview.keys.copy_key")}
                           aria-label={t("overview.keys.copy_key")}
-                          onClick={() => handleCopy(key.name)}
+                          onClick={() => copy(key.name)}
                         >
-                          {copiedKey === key.name ? <Check className="text-primary" /> : <Copy />}
+                          {copied === key.name ? <Check className="text-primary" /> : <Copy />}
                         </Button>
                       )}
                     </div>
@@ -623,7 +662,7 @@ export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
                   <TableCell className="font-mono">
                     <div className="flex items-center gap-1.5">
                       <span className="max-w-56 truncate" title={auth.name}>
-                        {auth.name}
+                        {displayAuthName(auth.name)}
                       </span>
                       {auth.secondary && (
                         <span className="shrink-0 text-xs text-muted-foreground">#{auth.secondary}</span>
@@ -661,7 +700,20 @@ export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
           </Table>
         </TableSection>
       )}
+    </div>
+  );
+}
 
+/** 诊断：失败诊断 + 会话排行 */
+export function OverviewDiagnostics({ summary, loading }: OverviewSectionProps) {
+  const { t } = useI18n();
+  const { formatNumber, formatTokens } = useFormat();
+  const { copied, copy } = useCopyFeedback();
+
+  const sessions = summary?.session_stats ?? [];
+
+  return (
+    <div className="space-y-6">
       {/* 失败诊断 */}
       <TableSection
         icon={<ShieldAlert />}
@@ -711,9 +763,9 @@ export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
                         className="shrink-0 text-muted-foreground hover:text-foreground"
                         title={t("common.copy")}
                         aria-label={t("common.copy")}
-                        onClick={() => handleCopy(session.name)}
+                        onClick={() => copy(session.name)}
                       >
-                        {copiedKey === session.name ? <Check className="text-primary" /> : <Copy />}
+                        {copied === session.name ? <Check className="text-primary" /> : <Copy />}
                       </Button>
                     </span>
                   </TableCell>
@@ -737,17 +789,6 @@ export function OverviewTab({ summary, loading, pricing }: OverviewTabProps) {
             </TableBody>
           </Table>
         </TableSection>
-      )}
-
-      {editing && (
-        <CustomPriceModal
-          open
-          modelName={editing.modelName}
-          currentPrice={editing.price}
-          isCustom={editing.isCustom}
-          onClose={() => setEditing(null)}
-          onSaved={pricing.reload}
-        />
       )}
     </div>
   );

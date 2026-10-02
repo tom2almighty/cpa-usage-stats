@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useFormat } from "@/hooks/use-format";
 import { useI18n } from "@/i18n/context";
 import { groupCostDetails, type PricingTable } from "@/lib/pricing";
@@ -15,8 +15,14 @@ interface ModelBarChartProps {
   className?: string;
 }
 
+/** 5 级 chart 色阶 */
+function chartColor(index: number): string {
+  const token = `var(--chart-${(index % 5) + 1})`;
+  return index < 5 ? token : `color-mix(in oklab, ${token} 60%, transparent)`;
+}
+
 /**
- * Top 模型水平排行条形图：单图聚焦 + 指标切换。
+ * Top 模型水平排行条形图：单图聚焦、紧凑尺寸、采用标准 chart 颜色 token。
  * 针对大语言模型名称长、头部集中的特点，左侧 Y 轴放置模型名，右侧展现量化柱状对比。
  */
 export function ModelBarChart({ models, metric, pricingTable, className }: ModelBarChartProps) {
@@ -39,12 +45,18 @@ export function ModelBarChart({ models, metric, pricingTable, className }: Model
       };
     });
 
-    return list.sort((a, b) => b.value - a.value).slice(0, 8);
+    return list
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6)
+      .map((item, index) => ({
+        ...item,
+        fill: chartColor(index),
+      }));
   }, [models, metric, pricingTable]);
 
   if (data.length === 0) {
     return (
-      <div className="flex h-56 items-center justify-center text-xs text-muted-foreground">
+      <div className={cn("flex h-44 items-center justify-center text-xs text-muted-foreground", className)}>
         {t("overview.models.empty")}
       </div>
     );
@@ -57,25 +69,25 @@ export function ModelBarChart({ models, metric, pricingTable, className }: Model
   };
 
   return (
-    <div className={cn("h-64 w-full", className)}>
+    <div className={cn("h-48 w-full", className)}>
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart layout="vertical" data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+        <BarChart layout="vertical" data={data} margin={{ top: 0, right: 24, left: 0, bottom: 0 }}>
           <CartesianGrid horizontal={false} strokeDasharray="3 3" className="stroke-muted/40" />
           <XAxis
             type="number"
             tickFormatter={formatTick}
-            className="fill-muted-foreground font-mono text-[11px]"
+            className="fill-muted-foreground font-mono text-[10px]"
             tickLine={false}
             axisLine={false}
           />
           <YAxis
             type="category"
             dataKey="name"
-            width={130}
+            width={105}
             tickLine={false}
             axisLine={false}
             className="fill-muted-foreground font-mono text-xs"
-            tickFormatter={(val: string) => (val.length > 16 ? `${val.slice(0, 15)}…` : val)}
+            tickFormatter={(val: string) => (val.length > 13 ? `${val.slice(0, 12)}…` : val)}
           />
           <Tooltip
             cursor={{ fill: "var(--muted)", opacity: 0.3 }}
@@ -83,10 +95,13 @@ export function ModelBarChart({ models, metric, pricingTable, className }: Model
               if (!active || !payload?.length) return null;
               const item = payload[0].payload;
               return (
-                <div className="space-y-1 rounded-lg border bg-popover p-2.5 text-xs text-popover-foreground shadow-md">
-                  <div className="font-mono font-semibold text-foreground">{item.name}</div>
+                <div className="space-y-1 rounded-lg border bg-popover p-2 text-xs text-popover-foreground shadow-md">
+                  <div className="flex items-center gap-1.5 font-mono font-semibold text-foreground">
+                    <span className="size-2 rounded-full" style={{ background: item.fill }} />
+                    {item.name}
+                  </div>
                   {item.provider && <div className="text-[11px] text-muted-foreground">{item.provider}</div>}
-                  <div className="space-y-0.5 border-t pt-1 font-mono tabular-nums">
+                  <div className="space-y-0.5 border-t pt-1 font-mono text-[11px] tabular-nums">
                     <div className="flex justify-between gap-4">
                       <span className="text-muted-foreground">{t("overview.models.th.tokens")}:</span>
                       <span className="font-medium">{formatTokens(item.tokens)}</span>
@@ -104,7 +119,11 @@ export function ModelBarChart({ models, metric, pricingTable, className }: Model
               );
             }}
           />
-          <Bar dataKey="value" fill="var(--primary)" radius={[0, 4, 4, 0]} maxBarSize={22} />
+          <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={16}>
+            {data.map((entry) => (
+              <Cell key={entry.name} fill={entry.fill} />
+            ))}
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
     </div>

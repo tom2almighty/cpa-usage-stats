@@ -24,6 +24,7 @@ import { CustomPriceModal } from "@/components/CustomPriceModal";
 import { DonutChart } from "@/components/charts/DonutChart";
 import { LatencyBars } from "@/components/charts/LatencyBars";
 import { ModelBarChart, type ModelMetric } from "@/components/charts/ModelBarChart";
+import { TokenBarChart } from "@/components/charts/TokenBarChart";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { FailurePanel } from "@/components/FailurePanel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -180,125 +181,6 @@ function useCopyFeedback() {
   };
   return { copied, copy };
 }
-/** Token 分布与构成：区分缓存、输入、输出、推理，横向排列与多段进度条展示 */
-function TokenDistribution({ summary, loading }: { summary: SummaryData | null; loading: boolean }) {
-  const { t } = useI18n();
-  const { formatTokens } = useFormat();
-
-  const cache = summary?.cache_read_tokens ?? 0;
-  const input = summary?.input_tokens ?? 0;
-  const totalOutput = summary?.output_tokens ?? 0;
-  const reasoning = summary?.reasoning_tokens ?? 0;
-  const output = Math.max(0, totalOutput - reasoning);
-
-  const total = cache + input + output + reasoning;
-
-  const items = [
-    {
-      key: "cache",
-      label: t("overview.tokens_dist.cache"),
-      count: cache,
-      percent: total > 0 ? (cache / total) * 100 : 0,
-      color: "bg-teal-500",
-      textColor: "text-teal-600 dark:text-teal-400",
-    },
-    {
-      key: "input",
-      label: t("overview.tokens_dist.input"),
-      count: input,
-      percent: total > 0 ? (input / total) * 100 : 0,
-      color: "bg-sky-500",
-      textColor: "text-sky-600 dark:text-sky-400",
-    },
-    {
-      key: "output",
-      label: t("overview.tokens_dist.output"),
-      count: output,
-      percent: total > 0 ? (output / total) * 100 : 0,
-      color: "bg-violet-500",
-      textColor: "text-violet-600 dark:text-violet-400",
-    },
-    {
-      key: "reasoning",
-      label: t("overview.tokens_dist.reasoning"),
-      count: reasoning,
-      percent: total > 0 ? (reasoning / total) * 100 : 0,
-      color: "bg-amber-500",
-      textColor: "text-amber-600 dark:text-amber-400",
-    },
-  ];
-
-  return (
-    <Card className="overflow-hidden">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Cpu className="size-4 text-muted-foreground" />
-            {t("overview.tokens_dist.title")}
-          </CardTitle>
-          <span className="font-mono text-xs text-muted-foreground">{formatTokens(total)}</span>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {loading ? (
-          <div className="space-y-3">
-            <Skeleton className="h-2.5 w-full rounded-full" />
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {items.map((it) => (
-                <Skeleton key={it.key} className="h-20 w-full rounded-lg" />
-              ))}
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* 顶部长条堆叠总进度条 */}
-            <div
-              className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted"
-              role="progressbar"
-              aria-label={t("overview.tokens_dist.title")}
-            >
-              {items.map((it) => (
-                <div
-                  key={it.key}
-                  className={`h-full transition-all duration-300 ${it.color}`}
-                  style={{ width: `${it.percent}%` }}
-                  title={`${it.label}: ${formatTokens(it.count)} (${it.percent.toFixed(1)}%)`}
-                />
-              ))}
-            </div>
-
-            {/* 横向排列的各个项目，带进度条与百分比 */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {items.map((it) => (
-                <div key={it.key} className="flex flex-col justify-between rounded-lg border bg-muted/20 p-3">
-                  <div className="flex items-center justify-between gap-1 text-xs">
-                    <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
-                      <span className={`size-2 rounded-full ${it.color}`} />
-                      {it.label}
-                    </span>
-                    <span className={`font-mono text-xs font-semibold tabular-nums ${it.textColor}`}>
-                      {it.percent.toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="mt-2 font-mono text-base font-semibold tabular-nums text-foreground">
-                    {formatTokens(it.count)}
-                  </div>
-                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${it.color}`}
-                      style={{ width: `${it.percent}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 /** 用量总览：KPI 指标条 + 趋势/Provider 分布 */
 export function OverviewSummary({ summary, loading, pricing }: OverviewSectionProps) {
   const { t } = useI18n();
@@ -425,8 +307,83 @@ export function OverviewSummary({ summary, loading, pricing }: OverviewSectionPr
           />
         </div>
       </div>
-      {/* Token 分布图 */}
-      <TokenDistribution summary={summary} loading={loading} />
+      {/* 宏观三图联动：调用走势 + Token 构成 + 渠道分布，同高度一行三列 */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {/* 图 1：调用走势 */}
+        <Card className="flex flex-col justify-between">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <TrendingUp className="size-4 text-muted-foreground" />
+                {hourly ? t("overview.trend.hourly") : t("overview.trend.daily")}
+              </CardTitle>
+              <Tabs value={trendView} onValueChange={(value) => value && setTrendView(value as TrendView)}>
+                <TabsList className="h-7">
+                  <TabsTrigger value="requests" className="px-2 text-xs">
+                    {t("overview.trend.tab_requests")}
+                  </TabsTrigger>
+                  <TabsTrigger value="tokens" className="px-2 text-xs">
+                    {t("overview.trend.tab_tokens")}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-2">
+            {loading ? (
+              <Skeleton className="h-44 w-full" />
+            ) : (
+              <TrendChart points={summary?.trend ?? []} hourly={hourly} view={trendView} />
+            )}
+          </CardContent>
+        </Card>
+
+        {/* 图 2：Token 构成与分布（水平条形图，使用 chart 色阶） */}
+        <Card className="flex flex-col justify-between">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Cpu className="size-4 text-muted-foreground" />
+              {t("overview.tokens_dist.title")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-2">
+            {loading ? <Skeleton className="h-44 w-full" /> : <TokenBarChart summary={summary} />}
+          </CardContent>
+        </Card>
+
+        {/* 图 3：Provider 渠道分布（环形图，使用 chart 色阶） */}
+        <Card className="flex flex-col justify-between">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Database className="size-4 text-muted-foreground" />
+              {t("overview.provider.title")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-2">
+            {loading ? (
+              <Skeleton className="h-44 w-full" />
+            ) : (
+              <DonutChart stats={summary?.provider_stats ?? []} metric="total_tokens" />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 延迟分位统计条 */}
+      <Card className="p-4">
+        <div className="space-y-1.5">
+          <span className="text-xs text-muted-foreground">{t("overview.trend.latency_title")}</span>
+          {loading ? (
+            <Skeleton className="h-14 w-full" />
+          ) : (
+            <LatencyBars
+              p50={summary?.p50_latency_ms ?? 0}
+              p95={summary?.p95_latency_ms ?? 0}
+              p99={summary?.p99_latency_ms ?? 0}
+            />
+          )}
+        </div>
+      </Card>
 
       {dropped > 0 && (
         <Alert variant="destructive">
@@ -435,67 +392,6 @@ export function OverviewSummary({ summary, loading, pricing }: OverviewSectionPr
           <AlertDescription>{t("overview.dropped.desc")}</AlertDescription>
         </Alert>
       )}
-
-      {/* 趋势 + Provider 分布 */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <TrendingUp className="size-4 text-muted-foreground" />
-              {hourly ? t("overview.trend.hourly") : t("overview.trend.daily")}
-            </CardTitle>
-            {/* 请求数与词元量纲不同，拆成两个视图而不是双 Y 轴叠在一起 */}
-            <CardAction>
-              <Tabs value={trendView} onValueChange={(value) => value && setTrendView(value as TrendView)}>
-                <TabsList className="h-8">
-                  <TabsTrigger value="requests" className="px-2.5 text-xs">
-                    {t("overview.trend.tab_requests")}
-                  </TabsTrigger>
-                  <TabsTrigger value="tokens" className="px-2.5 text-xs">
-                    {t("overview.trend.tab_tokens")}
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {loading ? (
-              <Skeleton className="h-64 w-full" />
-            ) : (
-              <TrendChart points={summary?.trend ?? []} hourly={hourly} view={trendView} />
-            )}
-            {/* 延迟分位原本只藏在 KPI 的 tooltip 里，这里补一条紧凑的条形图 */}
-            <div className="space-y-1.5 border-t pt-3">
-              <span className="text-xs text-muted-foreground">{t("overview.trend.latency_title")}</span>
-              {loading ? (
-                <Skeleton className="h-16 w-full" />
-              ) : (
-                <LatencyBars
-                  p50={summary?.p50_latency_ms ?? 0}
-                  p95={summary?.p95_latency_ms ?? 0}
-                  p99={summary?.p99_latency_ms ?? 0}
-                />
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Database className="size-4 text-muted-foreground" />
-              {t("overview.provider.title")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-56 w-full" />
-            ) : (
-              <DonutChart stats={summary?.provider_stats ?? []} metric="total_tokens" />
-            )}
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }

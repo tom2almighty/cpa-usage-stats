@@ -143,7 +143,8 @@
     "provider": {
       "title": "Provider distribution",
       "empty": "No provider data",
-      "share": "Share"
+      "share": "Share",
+      "other": "Other"
     },
     "models": {
       "title": "Model ranking",

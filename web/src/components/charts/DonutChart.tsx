@@ -3,7 +3,7 @@ import { Cell, Label, Pie, PieChart } from "recharts";
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { useFormat } from "@/hooks/use-format";
 import { useI18n } from "@/i18n/context";
-import { cn } from "@/lib/utils";
+import { cn, displayAuthName, maskApiKey } from "@/lib/utils";
 import type { GroupStat } from "@/types";
 
 interface DonutChartProps {
@@ -29,14 +29,49 @@ export function DonutChart({ stats, metric, className }: DonutChartProps) {
     const usable = stats.filter((stat) => stat[metric] > 0);
     const total = usable.reduce((sum, stat) => sum + stat[metric], 0);
     if (total <= 0) return [];
-    return usable.map((stat, index) => ({
-      stat,
-      name: stat.name || "-",
-      value: stat[metric],
-      share: stat[metric] / total,
-      fill: sliceColor(index),
-    }));
-  }, [stats, metric]);
+
+    const top = usable.slice(0, 5);
+    const rest = usable.slice(5);
+
+    const items = top.map((stat, index) => {
+      const raw = stat.name || "-";
+      let shortName = raw;
+      if (raw.startsWith("sk-") || raw.length > 20) {
+        shortName = maskApiKey(raw);
+      } else if (raw.includes("@")) {
+        shortName = displayAuthName(raw);
+      }
+      if (stat.secondary) {
+        shortName = `${shortName} #${stat.secondary}`;
+      }
+      if (shortName.length > 14) {
+        shortName = `${shortName.slice(0, 13)}…`;
+      }
+      return {
+        stat,
+        name: shortName,
+        fullName: stat.secondary ? `${raw} #${stat.secondary}` : raw,
+        value: stat[metric],
+        share: stat[metric] / total,
+        fill: sliceColor(index),
+      };
+    });
+
+    if (rest.length > 0) {
+      const otherLabel = t("overview.provider.other") || "Other";
+      const restValue = rest.reduce((sum, s) => sum + s[metric], 0);
+      items.push({
+        stat: { name: otherLabel, [metric]: restValue } as unknown as GroupStat,
+        name: otherLabel,
+        fullName: otherLabel,
+        value: restValue,
+        share: restValue / total,
+        fill: sliceColor(5),
+      });
+    }
+
+    return items;
+  }, [stats, metric, t]);
 
   const config = useMemo(
     () =>
@@ -128,7 +163,9 @@ export function DonutChart({ stats, metric, className }: DonutChartProps) {
             )}
           >
             <span className="size-2 shrink-0 rounded-xs" style={{ background: slice.fill }} />
-            <span className="min-w-0 flex-1 truncate">{slice.name}</span>
+            <span className="min-w-0 flex-1 truncate" title={slice.fullName}>
+              {slice.name}
+            </span>
             <span className="shrink-0 font-mono text-muted-foreground">{formatValue(slice.value)}</span>
             <span className="w-10 shrink-0 text-right font-mono tabular-nums text-muted-foreground">
               {(slice.share * 100).toFixed(0)}%

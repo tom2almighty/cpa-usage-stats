@@ -293,6 +293,7 @@ func TestV8FieldsRoundTrip(t *testing.T) {
 	in := model.UsageRecord{
 		RequestID:            "req-8",
 		TraceID:              "ab12cd34",
+		SelectionID:          "sel-8",
 		SessionID:            "sess-8",
 		Provider:             "codex",
 		BaseURL:              "https://upstream.example.com",
@@ -325,7 +326,8 @@ func TestV8FieldsRoundTrip(t *testing.T) {
 		t.Fatalf("keyword over session_id found %d records, want 1", list.Total)
 	}
 	got := list.Items[0]
-	if got.SessionID != in.SessionID || got.ResponseModel != in.ResponseModel || got.BaseURL != in.BaseURL ||
+	if got.SessionID != in.SessionID || got.SelectionID != in.SelectionID ||
+		got.ResponseModel != in.ResponseModel || got.BaseURL != in.BaseURL ||
 		got.AuthIndex != in.AuthIndex || got.ReasoningEffort != in.ReasoningEffort ||
 		got.ServiceTier != in.ServiceTier || got.EffectiveServiceTier != in.EffectiveServiceTier ||
 		got.ResponseServiceTier != in.ResponseServiceTier ||

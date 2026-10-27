@@ -154,6 +154,7 @@ var tableColumns = []struct{ name, ddl string }{
 	{"id", "INTEGER PRIMARY KEY AUTOINCREMENT"},
 	{"request_id", "TEXT NOT NULL"},
 	{"trace_id", "TEXT"},
+	{"selection_id", "TEXT"},
 	{"session_id", "TEXT"},
 	{"parent_session_id", "TEXT"},
 	{"provider", "TEXT"},
@@ -293,7 +294,7 @@ func (s *Storage) InsertBatch(records []model.UsageRecord) error {
 
 	stmt, err := tx.Prepare(`
 		INSERT INTO usage_records (
-			request_id, trace_id, session_id, parent_session_id, provider, base_url,
+			request_id, trace_id, selection_id, session_id, parent_session_id, provider, base_url,
 			executor_type, model, response_model, alias, api_key, is_native_key, access_provider,
 			auth_id, auth_index, auth_type, source,
 			reasoning_effort, service_tier, effective_service_tier, response_service_tier,
@@ -301,7 +302,7 @@ func (s *Storage) InsertBatch(records []model.UsageRecord) error {
 			failed, status_code, error_type, failure_body, response_headers,
 			input_tokens, output_tokens, reasoning_tokens,
 			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare insert: %w", err)
@@ -327,6 +328,7 @@ func (s *Storage) InsertBatch(records []model.UsageRecord) error {
 		_, err := stmt.Exec(
 			r.RequestID,
 			r.TraceID,
+			r.SelectionID,
 			r.SessionID,
 			r.ParentSessionID,
 			r.Provider,
@@ -706,7 +708,7 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 
 	rows, err := s.db.Query(fmt.Sprintf(`
 		SELECT
-			id, request_id, COALESCE(trace_id, ''), COALESCE(session_id, ''), COALESCE(parent_session_id, ''),
+			id, request_id, COALESCE(trace_id, ''), COALESCE(selection_id, ''), COALESCE(session_id, ''), COALESCE(parent_session_id, ''),
 			COALESCE(provider, ''), COALESCE(base_url, ''), COALESCE(executor_type, ''),
 			COALESCE(model, ''), COALESCE(response_model, ''), COALESCE(alias, ''), COALESCE(api_key, ''),
 			COALESCE(is_native_key, 0), COALESCE(access_provider, ''),
@@ -734,6 +736,7 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 			&r.ID,
 			&r.RequestID,
 			&r.TraceID,
+			&r.SelectionID,
 			&r.SessionID,
 			&r.ParentSessionID,
 			&r.Provider,

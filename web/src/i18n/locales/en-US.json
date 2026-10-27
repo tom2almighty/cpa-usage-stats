@@ -215,6 +215,7 @@
     "detail": {
       "request_id": "Request ID",
       "trace_id": "Trace ID",
+      "selection_id": "Selection ID",
       "session_id": "Session ID",
       "source": "Source",
       "base_url": "Upstream base URL",

@@ -71,6 +71,7 @@ export interface StoredRecord {
   id: number;
   request_id: string;
   trace_id: string;
+  selection_id: string;
   session_id: string;
   parent_session_id: string;
   provider: string;

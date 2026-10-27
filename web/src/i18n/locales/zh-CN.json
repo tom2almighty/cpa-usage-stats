@@ -215,6 +215,7 @@
     "detail": {
       "request_id": "Request ID",
       "trace_id": "Trace ID",
+      "selection_id": "Selection ID",
       "session_id": "Session ID",
       "source": "来源",
       "base_url": "上游 Base URL",

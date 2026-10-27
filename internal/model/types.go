@@ -24,6 +24,7 @@ type EnvelopeError struct {
 type UsageRecord struct {
 	RequestID            string        `json:"RequestID,omitempty"`
 	TraceID              string        `json:"TraceID,omitempty"`
+	SelectionID          string        `json:"SelectionID,omitempty"`
 	Provider             string        `json:"Provider,omitempty"`
 	BaseURL              string        `json:"BaseURL,omitempty"`
 	ExecutorType         string        `json:"ExecutorType,omitempty"`
@@ -77,6 +78,7 @@ type StoredRecord struct {
 	ID                   int64               `json:"id"`
 	RequestID            string              `json:"request_id"`
 	TraceID              string              `json:"trace_id"`
+	SelectionID          string              `json:"selection_id"`
 	SessionID            string              `json:"session_id"`
 	ParentSessionID      string              `json:"parent_session_id"`
 	Provider             string              `json:"provider"`

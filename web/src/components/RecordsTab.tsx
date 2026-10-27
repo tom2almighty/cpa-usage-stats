@@ -155,6 +155,7 @@ function DetailRow({ record, cost }: { record: StoredRecord; cost: RecordCost | 
   const metaItems: { label: string; value: string; badge?: boolean }[] = [
     { label: t("records.detail.request_id"), value: record.request_id },
     { label: t("records.detail.trace_id"), value: record.trace_id },
+    ...(record.selection_id ? [{ label: t("records.detail.selection_id"), value: record.selection_id }] : []),
     { label: t("records.detail.session_id"), value: record.session_id },
     ...(record.parent_session_id
       ? [{ label: t("records.detail.parent_session"), value: record.parent_session_id }]

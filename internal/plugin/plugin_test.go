@@ -3,10 +3,12 @@ package plugin
 import (
 	"encoding/json"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"cpa-usage-stats/internal/config"
 	"cpa-usage-stats/internal/handler"
 	"cpa-usage-stats/internal/model"
 )
@@ -19,6 +21,77 @@ type hostRegistration struct {
 		Name, Version, Author, GitHubRepository string
 	} `json:"metadata"`
 	Capabilities map[string]bool `json:"capabilities"`
+}
+
+func TestStatsWithPendingLifecycleWriter(t *testing.T) {
+	for _, operation := range []string{"reconfigure", "quiesce"} {
+		t.Run(operation, func(t *testing.T) {
+			p := &Instance{}
+			cfg := config.DefaultConfig()
+			cfg.DBPath = filepath.Join(t.TempDir(), "usage.db")
+			cfg.RetentionDays = 0
+			if err := p.apply(cfg); err != nil {
+				t.Fatal(err)
+			}
+			defer p.handleShutdown()
+
+			p.mu.RLock()
+			writerDone := make(chan error, 1)
+			go func() {
+				if operation == "reconfigure" {
+					writerDone <- p.apply(cfg)
+					return
+				}
+				p.handleQuiesce()
+				writerDone <- nil
+			}()
+
+			// TryRLock starts failing only after the writer has queued, giving
+			// us the exact interleaving that used to deadlock /stats.
+			deadline := time.Now().Add(5 * time.Second)
+			for p.mu.TryRLock() {
+				p.mu.RUnlock()
+				if time.Now().After(deadline) {
+					p.mu.RUnlock()
+					<-writerDone
+					t.Fatal("lifecycle writer did not reach the instance lock")
+				}
+				runtime.Gosched()
+			}
+
+			response := make(chan model.ManagementResponse, 1)
+			go func() {
+				response <- p.handleManagementLocked(model.ManagementRequest{
+					Method: "GET",
+					Path:   handler.APIBasePath + "/stats",
+				})
+			}()
+
+			select {
+			case resp := <-response:
+				if resp.StatusCode != 200 {
+					t.Errorf("stats status = %d, body = %s", resp.StatusCode, resp.Body)
+				}
+				var stats model.RuntimeStats
+				if err := json.Unmarshal(resp.Body, &stats); err != nil {
+					t.Fatal(err)
+				}
+				if stats.QueueCapacity != cfg.ChannelSize {
+					t.Errorf("queue capacity = %d, want %d", stats.QueueCapacity, cfg.ChannelSize)
+				}
+			case <-time.After(time.Second):
+				p.mu.RUnlock()
+				<-response
+				<-writerDone
+				t.Fatal("stats blocked behind a pending lifecycle writer")
+			}
+
+			p.mu.RUnlock()
+			if err := <-writerDone; err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
 }
 
 func call(t *testing.T, method string, req any) json.RawMessage {

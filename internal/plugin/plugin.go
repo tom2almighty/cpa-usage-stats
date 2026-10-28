@@ -39,20 +39,6 @@ var (
 func GetInstance() *Instance {
 	once.Do(func() {
 		pluginInstance = &Instance{}
-		// The handler cannot import the worker package (it would cycle through
-		// storage), so the counter source is injected here.
-		handler.SetStatsProvider(func() model.RuntimeStats {
-			p := pluginInstance
-			if p == nil {
-				return model.RuntimeStats{}
-			}
-			p.mu.RLock()
-			defer p.mu.RUnlock()
-			if p.worker == nil {
-				return model.RuntimeStats{}
-			}
-			return p.worker.Stats()
-		})
 	})
 	return pluginInstance
 }
@@ -253,7 +239,17 @@ func (p *Instance) handleManagementHandle(payload []byte) ([]byte, error) {
 
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return okEnvelope(handler.Handle(p.store, p.htmlContent, req, p.cfg.RetentionDays))
+	return okEnvelope(p.handleManagementLocked(req))
+}
+
+// handleManagementLocked runs while the caller holds the instance read lock.
+// The worker snapshot is taken here so /stats never re-enters the instance lock.
+func (p *Instance) handleManagementLocked(req model.ManagementRequest) model.ManagementResponse {
+	var stats model.RuntimeStats
+	if p.worker != nil {
+		stats = p.worker.Stats()
+	}
+	return handler.Handle(p.store, p.htmlContent, req, p.cfg.RetentionDays, stats)
 }
 
 func (p *Instance) handleShutdown() {

@@ -15,10 +15,7 @@ type FormatContextValue = Formatters & {
 
 const FormatContext = createContext<FormatContextValue | null>(null);
 
-/**
- * 展示偏好（数字单位、币种、汇率）的全局来源。
- * 与语言联动：单位「跟随语言」时格式化会跟着 i18n 切换。
- */
+/** 数字、货币与时间展示偏好的全局来源。 */
 export function FormatProvider({ children }: { children: ReactNode }) {
   const { language } = useI18n();
   const [preferences, setPreferences] = useState<FormatPreferences>(loadFormatPreferences);

@@ -20,7 +20,7 @@
   },
   "display": {
     "title": "显示设置",
-    "desc": "只影响界面上的数字与金额展示，不改动任何已记录的数据。",
+    "desc": "只影响界面上的数字、金额与时间展示，不改动任何已记录的数据。",
     "number_style": "数字单位",
     "number_style_localized": "跟随语言",
     "number_style_en": "英文单位 (K/M)",
@@ -32,6 +32,11 @@
     "exchange_rate": "汇率 (1 USD = ? CNY)",
     "exchange_rate_hint": "需要自己维护，不会自动联网更新。",
     "exchange_rate_invalid": "汇率需要是大于 0 的数字",
+    "timezone": "时间显示时区",
+    "timezone_placeholder": "留空跟随浏览器（{{timezone}}）",
+    "timezone_browser": "跟随浏览器",
+    "timezone_hint": "例如 Asia/Shanghai。仅影响时间标签与明细，时间范围和聚合仍按 CPA 容器时区计算。",
+    "timezone_invalid": "请输入有效的 IANA 时区，例如 Asia/Shanghai",
     "action": "显示设置"
   },
   "dashboard": {

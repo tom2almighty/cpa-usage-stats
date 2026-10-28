@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useFormat } from "@/hooks/use-format";
 import { useI18n } from "@/i18n/context";
-import type { Currency, NumberStyle } from "@/lib/format";
+import { browserTimeZone, type Currency, isValidTimeZone, type NumberStyle } from "@/lib/format";
 
 // 值到词条的映射显式写出来：值里带连字符/大写，直接拼 key 既对不上也过不了类型检查
 const NUMBER_STYLES = [
@@ -38,15 +38,27 @@ export function DisplaySettings() {
   const [open, setOpen] = useState(false);
   // 汇率用本地文本态，避免用户打到一半（"7."）就被规范化
   const [rate, setRate] = useState(() => String(preferences.exchangeRate));
+  const [timeZone, setTimeZone] = useState(() => preferences.timeZone);
 
   const rateNumber = Number(rate);
   const rateInvalid = rate.trim() === "" || !Number.isFinite(rateNumber) || rateNumber <= 0;
+  const timeZoneInvalid = timeZone.trim() !== "" && !isValidTimeZone(timeZone.trim());
+  const systemTimeZone = browserTimeZone() || "-";
+
+  const updateTimeZone = (value: string) => {
+    setTimeZone(value);
+    const trimmed = value.trim();
+    if (!trimmed || isValidTimeZone(trimmed)) update({ timeZone: trimmed });
+  };
 
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (next) setRate(String(preferences.exchangeRate));
+        if (next) {
+          setRate(String(preferences.exchangeRate));
+          setTimeZone(preferences.timeZone);
+        }
         setOpen(next);
       }}
     >
@@ -102,6 +114,30 @@ export function DisplaySettings() {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">{t("display.currency_hint")}</p>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="display-timezone">{t("display.timezone")}</Label>
+            <div className="flex gap-2">
+              <Input
+                id="display-timezone"
+                value={timeZone}
+                placeholder={t("display.timezone_placeholder", { timezone: systemTimeZone })}
+                aria-invalid={timeZoneInvalid}
+                onChange={(event) => updateTimeZone(event.target.value)}
+                className="font-mono"
+              />
+              <Button type="button" variant="outline" onClick={() => updateTimeZone("")}>
+                {t("display.timezone_browser")}
+              </Button>
+            </div>
+            {timeZoneInvalid ? (
+              <p className="text-xs text-destructive">{t("display.timezone_invalid")}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {t("display.timezone_hint", { timezone: systemTimeZone })}
+              </p>
+            )}
           </div>
 
           {preferences.currency === "CNY" && (

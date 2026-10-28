@@ -6,7 +6,7 @@ import type { PricingState } from "@/hooks/use-pricing";
 import { useI18n } from "@/i18n/context";
 import type { UsageMetric } from "@/lib/metrics";
 import { costPerToken } from "@/lib/pricing";
-import { cn, formatBucket, formatDuration } from "@/lib/utils";
+import { cn, formatDuration } from "@/lib/utils";
 import type { SummaryData } from "@/types";
 
 type SeriesKey = "success" | "failed" | "input" | "output" | "cost" | "speed" | "avg" | "p95";
@@ -61,7 +61,7 @@ interface UsageTimeChartProps {
  */
 export function UsageTimeChart({ summary, metric, pricing, className }: UsageTimeChartProps) {
   const { t } = useI18n();
-  const { formatNumber, formatTokens, formatCost } = useFormat();
+  const { formatNumber, formatTokens, formatCost, formatBucket } = useFormat();
 
   const hourly = summary?.bucket === "hour";
   const costRate = useMemo(

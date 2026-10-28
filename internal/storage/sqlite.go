@@ -562,9 +562,24 @@ func (s *Storage) GetSummary(filter model.UsageFilter, hourly bool) (*model.Summ
 		); err != nil {
 			return nil, fmt.Errorf("scan trend: %w", err)
 		}
+		p.Bucket = asRFC3339(p.Bucket, hourly)
 		resp.Trend = append(resp.Trend, p)
 	}
 	return resp, rows.Err()
+}
+
+// asRFC3339 makes chart buckets unambiguous. SQLite stores zone-less wall
+// time, so interpret it in the same location used when the row was written.
+func asRFC3339(bucket string, hourly bool) string {
+	layout := "2006-01-02"
+	if hourly {
+		layout = "2006-01-02 15"
+	}
+	parsed, err := time.ParseInLocation(layout, bucket, time.Local)
+	if err != nil {
+		return bucket
+	}
+	return parsed.Format(time.RFC3339)
 }
 
 // groupStats aggregates usage by one dimension. groupBy and secondary are
@@ -870,11 +885,22 @@ func (s *Storage) Stats(retentionDays int) (*model.StorageStats, error) {
 		SHMSizeBytes:     shmSize,
 		TotalSizeBytes:   dbSize + walSize + shmSize,
 		RecordCount:      recordCount,
-		OldestRecordAt:   oldest.String,
-		NewestRecordAt:   newest.String,
+		OldestRecordAt:   storedTimeAsRFC3339(oldest.String),
+		NewestRecordAt:   storedTimeAsRFC3339(newest.String),
 		ReclaimableBytes: freePages * pageSize,
 		RetentionDays:    retentionDays,
 	}, nil
+}
+
+func storedTimeAsRFC3339(value string) string {
+	if value == "" {
+		return ""
+	}
+	parsed, err := time.ParseInLocation(timeLayout, value, time.Local)
+	if err != nil {
+		return value
+	}
+	return parsed.Format(time.RFC3339)
 }
 
 // Vacuum rebuilds the database file and truncates the WAL, releasing pages

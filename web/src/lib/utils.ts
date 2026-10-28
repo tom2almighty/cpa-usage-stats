@@ -29,18 +29,6 @@ export function formatBytes(bytes: number): string {
   return `${unit === 0 || value >= 100 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
 }
 
-/** "2026-09-28 15:04:05.000" → "09-28 15:04:05" */
-export function formatDateTime(stored: string): string {
-  if (!stored) return "-";
-  return stored.replace("T", " ").slice(5, 19);
-}
-
-/** 小时桶 "2026-09-28 15" → "15:00"；天桶 → "09-28" */
-export function formatBucket(bucket: string, hourly: boolean): string {
-  if (!bucket) return "-";
-  return hourly ? `${bucket.slice(11, 13)}:00` : bucket.slice(5, 10);
-}
-
 /** 脱敏 API Key：保留可辨识前缀与末 4 位 */
 export function maskApiKey(key: string): string {
   const trimmed = (key ?? "").trim();

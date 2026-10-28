@@ -18,6 +18,7 @@ export interface GroupStat {
 }
 
 export interface TrendPoint {
+  /** Absolute bucket start in RFC3339, carrying the CPA container offset. */
   bucket: string;
   requests: number;
   failed: number;

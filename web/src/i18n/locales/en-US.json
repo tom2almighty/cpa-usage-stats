@@ -20,7 +20,7 @@
   },
   "display": {
     "title": "Display settings",
-    "desc": "Affects how numbers and amounts are shown only; stored data is never changed.",
+    "desc": "Affects how numbers, amounts and times are shown only; stored data is never changed.",
     "number_style": "Number units",
     "number_style_localized": "Follow language",
     "number_style_en": "English units (K/M)",
@@ -32,6 +32,11 @@
     "exchange_rate": "Exchange rate (1 USD = ? CNY)",
     "exchange_rate_hint": "Maintained by you; it is never fetched automatically.",
     "exchange_rate_invalid": "Exchange rate must be a number greater than 0",
+    "timezone": "Display time zone",
+    "timezone_placeholder": "Empty follows the browser ({{timezone}})",
+    "timezone_browser": "Use browser",
+    "timezone_hint": "For example Asia/Shanghai. This changes time labels and records only; ranges and aggregation still use the CPA container time zone.",
+    "timezone_invalid": "Enter a valid IANA time zone, for example Asia/Shanghai",
     "action": "Display settings"
   },
   "dashboard": {

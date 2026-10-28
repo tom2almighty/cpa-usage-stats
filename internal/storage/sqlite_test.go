@@ -82,8 +82,11 @@ func TestStorageSummaryRecordsAndRetention(t *testing.T) {
 	if len(summary.APIKeys) != 2 || len(summary.Providers) != 2 {
 		t.Errorf("want 2 api keys and 2 providers, got %d / %d", len(summary.APIKeys), len(summary.Providers))
 	}
-	if summary.Bucket != "hour" || len(summary.Trend) == 0 || len(summary.Trend[0].Bucket) != len("2006-01-02 15") {
+	if summary.Bucket != "hour" || len(summary.Trend) == 0 {
 		t.Errorf("unexpected hourly trend: bucket=%s trend=%+v", summary.Bucket, summary.Trend)
+	}
+	if _, err := time.Parse(time.RFC3339, summary.Trend[0].Bucket); err != nil {
+		t.Errorf("trend bucket is not RFC3339: %q: %v", summary.Trend[0].Bucket, err)
 	}
 	if summary.Trend[0].InputTokens == 0 || summary.Trend[0].OutputTokens == 0 {
 		t.Errorf("trend points should carry input/output tokens, got %+v", summary.Trend[0])
@@ -139,6 +142,9 @@ func TestStorageStatsAndVacuum(t *testing.T) {
 	}
 	if stats.RecordCount != 1 || stats.OldestRecordAt == "" || stats.NewestRecordAt == "" {
 		t.Fatalf("stats after insert = %+v", stats)
+	}
+	if _, err := time.Parse(time.RFC3339, stats.OldestRecordAt); err != nil {
+		t.Fatalf("oldest record time is not RFC3339: %q: %v", stats.OldestRecordAt, err)
 	}
 	if stats.TotalSizeBytes < stats.DBSizeBytes {
 		t.Fatalf("total size %d < db size %d", stats.TotalSizeBytes, stats.DBSizeBytes)

@@ -18,21 +18,16 @@ const DAY_MS = 86_400_000;
 /** 强度分档：0 为空，其余四档递增透明度。 */
 const LEVEL_CLASS = ["bg-muted/60", "bg-chart-3/25", "bg-chart-3/45", "bg-chart-3/70", "bg-chart-3"] as const;
 
-function startOfDay(date: Date): Date {
-  const next = new Date(date);
-  next.setHours(0, 0, 0, 0);
-  return next;
-}
-
 /** 热力图按周列排布，这里取包含该日的周一作为列起点。 */
 function startOfWeek(date: Date): Date {
-  const next = startOfDay(date);
-  next.setDate(next.getDate() - ((next.getDay() + 6) % 7));
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() - ((next.getUTCDay() + 6) % 7));
   return next;
 }
 
-function dayKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+/** 网格日期只是日历坐标，统一锚定 UTC 中午以避免 DST 和本地午夜偏移。 */
+function gridDayKey(date: Date): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
 }
 
 type Cell = { key: string; date: Date; value: number; level: number };
@@ -51,7 +46,7 @@ export function ActivityHeatmap({
   className?: string;
 }) {
   const { t } = useI18n();
-  const { formatNumber, formatTokens, formatCost } = useFormat();
+  const { formatNumber, formatTokens, formatCost, formatDateKey } = useFormat();
   const [metric, setMetric] = useState<HeatmapMetric>("requests");
 
   const { weeks, monthLabels, max, total } = useMemo(() => {
@@ -62,9 +57,9 @@ export function ActivityHeatmap({
     const hourly = summary?.bucket === "hour";
     const valueByDay = new Map<string, number>();
     for (const point of trend) {
-      const date = new Date(point.bucket.replace(" ", "T"));
+      const date = new Date(point.bucket);
       if (Number.isNaN(date.getTime())) continue;
-      const key = dayKey(date);
+      const key = formatDateKey(date);
       const value =
         metric === "tokens"
           ? point.tokens
@@ -76,9 +71,10 @@ export function ActivityHeatmap({
       valueByDay.set(key, (valueByDay.get(key) ?? 0) + value);
     }
     // 小时桶只覆盖当天，热力图的空档不应被误读成“当天没量”。
-    const partialDays = new Set(hourly ? [dayKey(new Date())] : []);
+    const partialDays = new Set(hourly ? [formatDateKey(new Date())] : []);
 
-    const today = startOfDay(new Date());
+    const [todayYear, todayMonth, todayDay] = formatDateKey(new Date()).split("-").map(Number);
+    const today = new Date(Date.UTC(todayYear, todayMonth - 1, todayDay, 12));
     const firstWeek = startOfWeek(new Date(today.getTime() - (WEEKS - 1) * 7 * DAY_MS));
     const values: number[] = [];
     const matrix: Cell[][] = [];
@@ -88,15 +84,15 @@ export function ActivityHeatmap({
       const column: Cell[] = [];
       for (let day = 0; day < DAYS; day++) {
         const date = new Date(firstWeek.getTime() + (week * DAYS + day) * DAY_MS);
-        const key = dayKey(date);
+        const key = gridDayKey(date);
         const future = date.getTime() > today.getTime();
         const value = future || partialDays.has(key) ? 0 : (valueByDay.get(key) ?? 0);
         if (!future && !partialDays.has(key)) values.push(value);
         column.push({ key, date, value, level: 0 });
       }
       const first = column[0].date;
-      if (first.getDate() <= DAYS) {
-        labels.push({ index: week, text: `${first.getMonth() + 1}/${first.getDate()}` });
+      if (first.getUTCDate() <= DAYS) {
+        labels.push({ index: week, text: `${first.getUTCMonth() + 1}/${first.getUTCDate()}` });
       }
       matrix.push(column);
     }
@@ -114,7 +110,7 @@ export function ActivityHeatmap({
       max: peak,
       total: values.reduce((sum, value) => sum + value, 0),
     };
-  }, [metric, pricingTable, summary]);
+  }, [formatDateKey, metric, pricingTable, summary]);
 
   const formatValue = (value: number) => {
     if (metric === "tokens") return formatTokens(value);
@@ -191,7 +187,7 @@ export function ActivityHeatmap({
                         />
                         <TooltipContent>
                           <span className="font-mono tabular-nums">
-                            {dayKey(cell.date)} · {formatValue(cell.value)}
+                            {cell.key} · {formatValue(cell.value)}
                           </span>
                         </TooltipContent>
                       </Tooltip>

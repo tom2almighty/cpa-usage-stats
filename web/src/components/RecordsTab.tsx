@@ -23,7 +23,7 @@ import type { PricingState } from "@/hooks/use-pricing";
 import { useI18n } from "@/i18n/context";
 import { latencyTone, toneTextClass } from "@/lib/metrics";
 import { type RecordCost, recordCost } from "@/lib/pricing";
-import { cn, copyToClipboard, formatDateTime, formatDuration, maskApiKey } from "@/lib/utils";
+import { cn, copyToClipboard, formatDuration, maskApiKey } from "@/lib/utils";
 import type { OptionsResponse, RecordListResponse, RecordsFilters, StoredRecord } from "@/types";
 
 interface RecordsTabProps {
@@ -651,7 +651,7 @@ function RecordRows({
   onToggle: () => void;
 }) {
   const { t } = useI18n();
-  const { formatTokens } = useFormat();
+  const { formatTokens, formatDateTime } = useFormat();
   const aliasNote =
     (record.alias && record.alias !== record.model) || (record.response_model && record.response_model !== record.model)
       ? [

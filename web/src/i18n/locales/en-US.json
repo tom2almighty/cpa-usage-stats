@@ -190,7 +190,7 @@
     "title": "Request records",
     "count": "{{count}} records",
     "reset_filters": "Reset filters",
-    "search_placeholder": "Search key / model / request / trace / session…",
+    "search_placeholder": "Search key / model / request / trace / selection / session…",
     "empty": "No matching records",
     "filter": {
       "model_all": "All models",

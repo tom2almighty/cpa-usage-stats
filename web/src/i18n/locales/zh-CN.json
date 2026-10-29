@@ -190,7 +190,7 @@
     "title": "调用明细",
     "count": "共 {{count}} 条记录",
     "reset_filters": "重置筛选",
-    "search_placeholder": "搜索 Key / 模型 / Request / Trace / Session…",
+    "search_placeholder": "搜索 Key / 模型 / Request / Trace / Selection / Session…",
     "empty": "无匹配记录",
     "filter": {
       "model_all": "全部模型",

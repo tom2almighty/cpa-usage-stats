@@ -331,6 +331,13 @@ func TestV8FieldsRoundTrip(t *testing.T) {
 	if list.Total != 1 {
 		t.Fatalf("keyword over session_id found %d records, want 1", list.Total)
 	}
+	list, err = store.GetRecords(model.UsageFilter{Keyword: "sel-8"})
+	if err != nil {
+		t.Fatalf("GetRecords by selection ID: %v", err)
+	}
+	if list.Total != 1 {
+		t.Fatalf("keyword over selection_id found %d records, want 1", list.Total)
+	}
 	got := list.Items[0]
 	if got.SessionID != in.SessionID || got.SelectionID != in.SelectionID ||
 		got.ResponseModel != in.ResponseModel || got.BaseURL != in.BaseURL ||

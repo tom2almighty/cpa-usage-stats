@@ -417,8 +417,8 @@ func buildWhere(filter model.UsageFilter) (string, []interface{}) {
 	}
 	if filter.Keyword != "" {
 		kw := "%" + filter.Keyword + "%"
-		clauses = append(clauses, "(request_id LIKE ? OR trace_id LIKE ? OR session_id LIKE ? OR model LIKE ? OR alias LIKE ? OR api_key LIKE ? OR failure_body LIKE ?)")
-		args = append(args, kw, kw, kw, kw, kw, kw, kw)
+		clauses = append(clauses, "(request_id LIKE ? OR trace_id LIKE ? OR selection_id LIKE ? OR session_id LIKE ? OR model LIKE ? OR alias LIKE ? OR api_key LIKE ? OR failure_body LIKE ?)")
+		args = append(args, kw, kw, kw, kw, kw, kw, kw, kw)
 	}
 
 	where := ""

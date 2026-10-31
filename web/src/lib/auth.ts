@@ -7,7 +7,7 @@
  */
 
 const MC_AUTH_KEY = "cli-proxy-auth";
-const ENC_PREFIX = "enc::v1::";
+const ENC_PREFIX = "enc::v2::";
 const SECRET_SALT = "cli-proxy-api-webui::secure-storage";
 const OWN_KEY_STORAGE = "cpa-usage-stats.management-key";
 const PANEL_KEY_STORAGE = "cpa-dashboard.management-key";
@@ -30,8 +30,7 @@ function readStorage(read: () => string): string {
 
 function getKeyBytes(): Uint8Array {
   const host = window.location.host;
-  const ua = navigator.userAgent;
-  return new TextEncoder().encode(`${SECRET_SALT}|${host}|${ua}`);
+  return new TextEncoder().encode(`${SECRET_SALT}|${host}`);
 }
 
 function xorBytes(data: Uint8Array, keyBytes: Uint8Array): Uint8Array {
@@ -53,7 +52,6 @@ function base64ToBytes(b64: string): Uint8Array {
 
 /** 管理中心用 XOR + base64 混淆保存连接状态，这里做同样的还原 */
 function deobfuscate(payload: string): string {
-  if (!payload.startsWith(ENC_PREFIX)) return payload;
   const encrypted = base64ToBytes(payload.slice(ENC_PREFIX.length));
   return new TextDecoder().decode(xorBytes(encrypted, getKeyBytes()));
 }
@@ -84,12 +82,16 @@ function fromPanel(): string {
 
 function fromManagementCenter(): string {
   const raw = readStorage(() => localStorage.getItem(MC_AUTH_KEY) ?? "");
-  if (!raw) return "";
+  // The management center retires pre-v2 login credentials rather than migrating them.
+  if (!raw.startsWith(ENC_PREFIX)) return "";
   try {
     const parsed: unknown = JSON.parse(deobfuscate(raw));
-    if (parsed && typeof parsed === "object" && "managementKey" in parsed) {
-      const key: unknown = parsed.managementKey;
-      return typeof key === "string" ? key : "";
+    if (parsed && typeof parsed === "object" && "state" in parsed) {
+      const state = parsed.state;
+      if (state && typeof state === "object" && "rememberPassword" in state && state.rememberPassword === true) {
+        const key: unknown = "managementKey" in state ? state.managementKey : undefined;
+        return typeof key === "string" ? key : "";
+      }
     }
   } catch {
     // 非同源、混淆格式变化或内容损坏

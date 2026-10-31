@@ -19,6 +19,7 @@ CLIProxyAPI（CPA 8.0+）用量统计插件：通过 usage 插件接口采集请
 
 ```bash
 ./build.sh                              # 打包前端并编译动态库
+(cd web && pnpm run test)                # 密钥解析测试
 go test ./...                           # 后端测试
 cd web && pnpm install && pnpm run dev  # 单独调试前端
 ```
@@ -73,12 +74,14 @@ plugins:
 ### 本地打包
 
 ```bash
-./scripts/package-release.sh 0.8.0
+./scripts/package-release.sh 0.8.1
 ```
 
 产物写入 `release-dist/`，包含平台压缩包与 `checksums.txt`。
 
 ### 使用
+
+官方管理中心仅复用当前 v2 格式中已勾选记住的密钥；旧格式需在官方管理中心重新登录并保存，或在插件页面手动输入。
 
 在管理中心插件列表点击「用量统计」，或直接访问：
 

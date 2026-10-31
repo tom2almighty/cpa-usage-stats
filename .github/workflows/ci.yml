@@ -47,6 +47,7 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm run lint
           pnpm run format:check
+          pnpm run test
           pnpm run build
       - name: Backend Test
         run: |

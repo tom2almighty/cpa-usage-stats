@@ -19,6 +19,7 @@ Requirements:
 
 ```bash
 ./build.sh                              # build frontend and shared library
+(cd web && pnpm run test)                # key resolution tests
 go test ./...                           # backend tests
 cd web && pnpm install && pnpm run dev  # frontend only
 ```
@@ -73,12 +74,14 @@ plugins:
 ### Local packaging
 
 ```bash
-./scripts/package-release.sh 0.8.0
+./scripts/package-release.sh 0.8.1
 ```
 
 Artifacts are written to `release-dist/` with platform archives and `checksums.txt`.
 
 ### Usage
+
+Only remembered keys in the official Management Center's current v2 storage format are reused. For older saved sessions, sign in and save the key again in the Management Center, or enter it manually on the plugin page.
 
 Open `Usage Stats` from the Management Center plugin list, or visit:
 

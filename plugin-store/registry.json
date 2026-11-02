@@ -4,7 +4,15 @@
     {
       "id": "cpa-usage-stats",
       "name": "CPA Usage Stats",
-      "description": "CPA 用量统计与可视化看板：通过 usage 插件接口采集请求与 Token 用量，异步写入 SQLite，并提供内嵌看板。 / CLIProxyAPI usage statistics and dashboard: collects request and token usage through the usage plugin API, persists asynchronously to SQLite, and ships an embedded dashboard.",
+      "description": "CLIProxyAPI usage statistics and dashboard: collects request and token usage through the usage plugin API, persists asynchronously to SQLite, and ships an embedded dashboard.",
+      "locales": {
+        "zh-CN": {
+          "description": "CPA 用量统计与可视化看板：通过 usage 插件接口采集请求与 Token 用量，异步写入 SQLite，并提供内嵌看板。"
+        },
+        "en": {
+          "description": "CLIProxyAPI usage statistics and dashboard: collects request and token usage through the usage plugin API, persists asynchronously to SQLite, and ships an embedded dashboard."
+        }
+      },
       "author": "tom2almighty",
       "repository": "https://github.com/tom2almighty/cpa-usage-stats",
       "logo": "https://raw.githubusercontent.com/tom2almighty/cpa-usage-stats/main/assets/logo.svg",

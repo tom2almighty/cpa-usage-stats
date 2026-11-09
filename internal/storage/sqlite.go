@@ -191,6 +191,18 @@ var tableColumns = []struct{ name, ddl string }{
 	{"cache_read_tokens", "INTEGER NOT NULL DEFAULT 0"},
 	{"cache_creation_tokens", "INTEGER NOT NULL DEFAULT 0"},
 	{"total_tokens", "INTEGER NOT NULL DEFAULT 0"},
+	// Modality counters stay NULL when the upstream sends no breakdown.
+	{"text_input_tokens", "INTEGER"},
+	{"image_input_tokens", "INTEGER"},
+	{"audio_input_tokens", "INTEGER"},
+	{"video_input_tokens", "INTEGER"},
+	{"file_input_tokens", "INTEGER"},
+	{"cached_text_tokens", "INTEGER"},
+	{"cached_image_tokens", "INTEGER"},
+	{"cached_audio_tokens", "INTEGER"},
+	{"text_output_tokens", "INTEGER"},
+	{"image_output_tokens", "INTEGER"},
+	{"audio_output_tokens", "INTEGER"},
 }
 
 // tableIndexes are applied on every open. requested_at leads every range query;
@@ -301,8 +313,11 @@ func (s *Storage) InsertBatch(records []model.UsageRecord) error {
 			stream, generate, requested_at, latency_ms, ttft_ms,
 			failed, status_code, error_type, failure_body, response_headers,
 			input_tokens, output_tokens, reasoning_tokens,
-			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
+			text_input_tokens, image_input_tokens, audio_input_tokens, video_input_tokens, file_input_tokens,
+			cached_text_tokens, cached_image_tokens, cached_audio_tokens,
+			text_output_tokens, image_output_tokens, audio_output_tokens
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare insert: %w", err)
@@ -367,6 +382,17 @@ func (s *Storage) InsertBatch(records []model.UsageRecord) error {
 			r.Detail.CacheReadTokens,
 			r.Detail.CacheCreationTokens,
 			r.Detail.TotalTokens,
+			r.Detail.TextInputTokens,
+			r.Detail.ImageInputTokens,
+			r.Detail.AudioInputTokens,
+			r.Detail.VideoInputTokens,
+			r.Detail.FileInputTokens,
+			r.Detail.CachedTextTokens,
+			r.Detail.CachedImageTokens,
+			r.Detail.CachedAudioTokens,
+			r.Detail.TextOutputTokens,
+			r.Detail.ImageOutputTokens,
+			r.Detail.AudioOutputTokens,
 		)
 		if err != nil {
 			return fmt.Errorf("exec insert: %w", err)
@@ -732,7 +758,10 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 			stream, generate, requested_at, latency_ms, ttft_ms,
 			failed, status_code, COALESCE(error_type, ''), COALESCE(failure_body, ''), COALESCE(response_headers, ''),
 			input_tokens, output_tokens, reasoning_tokens,
-			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens
+			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
+			text_input_tokens, image_input_tokens, audio_input_tokens, video_input_tokens, file_input_tokens,
+			cached_text_tokens, cached_image_tokens, cached_audio_tokens,
+			text_output_tokens, image_output_tokens, audio_output_tokens
 		FROM usage_records
 		%s
 		ORDER BY id DESC
@@ -788,6 +817,17 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 			&r.CacheReadTokens,
 			&r.CacheCreationTokens,
 			&r.TotalTokens,
+			&r.TextInputTokens,
+			&r.ImageInputTokens,
+			&r.AudioInputTokens,
+			&r.VideoInputTokens,
+			&r.FileInputTokens,
+			&r.CachedTextTokens,
+			&r.CachedImageTokens,
+			&r.CachedAudioTokens,
+			&r.TextOutputTokens,
+			&r.ImageOutputTokens,
+			&r.AudioOutputTokens,
 		); err != nil {
 			return nil, fmt.Errorf("scan record: %w", err)
 		}

@@ -214,6 +214,39 @@ function DetailRow({ record, cost }: { record: StoredRecord; cost: RecordCost | 
     ...(record.cache_creation_tokens > 0
       ? [{ label: t("records.detail.token_cache_write"), value: formatNumber(record.cache_creation_tokens) }]
       : []),
+    ...(record.text_input_tokens
+      ? [{ label: t("records.detail.token_text_input"), value: formatNumber(record.text_input_tokens) }]
+      : []),
+    ...(record.image_input_tokens
+      ? [{ label: t("records.detail.token_image_input"), value: formatNumber(record.image_input_tokens) }]
+      : []),
+    ...(record.audio_input_tokens
+      ? [{ label: t("records.detail.token_audio_input"), value: formatNumber(record.audio_input_tokens) }]
+      : []),
+    ...(record.video_input_tokens
+      ? [{ label: t("records.detail.token_video_input"), value: formatNumber(record.video_input_tokens) }]
+      : []),
+    ...(record.file_input_tokens
+      ? [{ label: t("records.detail.token_file_input"), value: formatNumber(record.file_input_tokens) }]
+      : []),
+    ...(record.cached_text_tokens
+      ? [{ label: t("records.detail.token_cached_text"), value: formatNumber(record.cached_text_tokens) }]
+      : []),
+    ...(record.cached_image_tokens
+      ? [{ label: t("records.detail.token_cached_image"), value: formatNumber(record.cached_image_tokens) }]
+      : []),
+    ...(record.cached_audio_tokens
+      ? [{ label: t("records.detail.token_cached_audio"), value: formatNumber(record.cached_audio_tokens) }]
+      : []),
+    ...(record.text_output_tokens
+      ? [{ label: t("records.detail.token_text_output"), value: formatNumber(record.text_output_tokens) }]
+      : []),
+    ...(record.image_output_tokens
+      ? [{ label: t("records.detail.token_image_output"), value: formatNumber(record.image_output_tokens) }]
+      : []),
+    ...(record.audio_output_tokens
+      ? [{ label: t("records.detail.token_audio_output"), value: formatNumber(record.audio_output_tokens) }]
+      : []),
     ...(record.cache_read_tokens > 0 && record.input_tokens > 0
       ? [
           {

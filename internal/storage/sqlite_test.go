@@ -350,6 +350,67 @@ func TestV8FieldsRoundTrip(t *testing.T) {
 	}
 }
 
+// TestModalityTokensRoundTrip verifies optional modality counters survive a
+// write/read cycle, including the difference between an explicit zero and an
+// absent counter.
+func TestModalityTokensRoundTrip(t *testing.T) {
+	store, err := New(filepath.Join(t.TempDir(), "usage.db"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer store.Close()
+
+	ptr := func(v int64) *int64 { return &v }
+	in := model.UsageRecord{
+		RequestID:   "req-modality",
+		Model:       "gpt-image-2.5",
+		RequestedAt: time.Now(),
+		Detail: model.UsageDetail{
+			InputTokens:       80,
+			OutputTokens:      1056,
+			TotalTokens:       1136,
+			TextInputTokens:   ptr(30),
+			ImageInputTokens:  ptr(50),
+			AudioInputTokens:  ptr(0),
+			FileInputTokens:   ptr(12),
+			CachedTextTokens:  ptr(25),
+			CachedImageTokens: ptr(15),
+			TextOutputTokens:  ptr(0),
+			ImageOutputTokens: ptr(1056),
+		},
+	}
+	if err := store.InsertBatch([]model.UsageRecord{in}); err != nil {
+		t.Fatalf("InsertBatch: %v", err)
+	}
+
+	list, err := store.GetRecords(model.UsageFilter{Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("GetRecords: %v", err)
+	}
+	if list.Total != 1 {
+		t.Fatalf("got %d records, want 1", list.Total)
+	}
+	got := list.Items[0]
+	if got.ImageInputTokens == nil || *got.ImageInputTokens != 50 {
+		t.Errorf("image input = %v, want 50", got.ImageInputTokens)
+	}
+	if got.AudioInputTokens == nil || *got.AudioInputTokens != 0 {
+		t.Errorf("audio input = %v, want explicit 0", got.AudioInputTokens)
+	}
+	if got.TextOutputTokens == nil || *got.TextOutputTokens != 0 {
+		t.Errorf("text output = %v, want explicit 0", got.TextOutputTokens)
+	}
+	if got.VideoInputTokens != nil || got.AudioOutputTokens != nil {
+		t.Errorf("absent counters should stay nil, got video=%v audio_out=%v", got.VideoInputTokens, got.AudioOutputTokens)
+	}
+	if got.CachedImageTokens == nil || *got.CachedImageTokens != 15 {
+		t.Errorf("cached image = %v, want 15", got.CachedImageTokens)
+	}
+	if got.FileInputTokens == nil || *got.FileInputTokens != 12 {
+		t.Errorf("file input = %v, want 12", got.FileInputTokens)
+	}
+}
+
 // TestFailureHeadersSaved verifies response headers are only saved on failed requests,
 // filtered for sensitive headers, and retrieved properly.
 func TestFailureHeadersSaved(t *testing.T) {

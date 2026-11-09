@@ -109,6 +109,18 @@ export interface StoredRecord {
   cache_read_tokens: number;
   cache_creation_tokens: number;
   total_tokens: number;
+  /** Modality counters are absent when the upstream sends no breakdown. */
+  text_input_tokens?: number | null;
+  image_input_tokens?: number | null;
+  audio_input_tokens?: number | null;
+  video_input_tokens?: number | null;
+  file_input_tokens?: number | null;
+  cached_text_tokens?: number | null;
+  cached_image_tokens?: number | null;
+  cached_audio_tokens?: number | null;
+  text_output_tokens?: number | null;
+  image_output_tokens?: number | null;
+  audio_output_tokens?: number | null;
 }
 
 export interface RecordListResponse {

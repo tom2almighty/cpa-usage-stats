@@ -74,7 +74,7 @@ plugins:
 ### Local packaging
 
 ```bash
-./scripts/package-release.sh 0.8.2
+./scripts/package-release.sh 0.9.0
 ```
 
 Artifacts are written to `release-dist/` with platform archives and `checksums.txt`.

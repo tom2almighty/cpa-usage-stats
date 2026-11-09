@@ -61,7 +61,8 @@ type UsageFailure struct {
 	Body       string `json:"Body,omitempty"`
 }
 
-// UsageDetail contains token accounting counters.
+// UsageDetail contains token accounting counters. The modality counters are
+// optional; nil means the upstream did not report a breakdown for that kind.
 type UsageDetail struct {
 	InputTokens         int64 `json:"InputTokens"`
 	OutputTokens        int64 `json:"OutputTokens"`
@@ -70,6 +71,18 @@ type UsageDetail struct {
 	CacheReadTokens     int64 `json:"CacheReadTokens"`
 	CacheCreationTokens int64 `json:"CacheCreationTokens"`
 	TotalTokens         int64 `json:"TotalTokens"`
+
+	TextInputTokens   *int64 `json:"TextInputTokens,omitempty"`
+	ImageInputTokens  *int64 `json:"ImageInputTokens,omitempty"`
+	AudioInputTokens  *int64 `json:"AudioInputTokens,omitempty"`
+	VideoInputTokens  *int64 `json:"VideoInputTokens,omitempty"`
+	FileInputTokens   *int64 `json:"FileInputTokens,omitempty"`
+	CachedTextTokens  *int64 `json:"CachedTextTokens,omitempty"`
+	CachedImageTokens *int64 `json:"CachedImageTokens,omitempty"`
+	CachedAudioTokens *int64 `json:"CachedAudioTokens,omitempty"`
+	TextOutputTokens  *int64 `json:"TextOutputTokens,omitempty"`
+	ImageOutputTokens *int64 `json:"ImageOutputTokens,omitempty"`
+	AudioOutputTokens *int64 `json:"AudioOutputTokens,omitempty"`
 }
 
 // StoredRecord represents a record stored in SQLite and returned by the
@@ -115,6 +128,18 @@ type StoredRecord struct {
 	CacheReadTokens      int64               `json:"cache_read_tokens"`
 	CacheCreationTokens  int64               `json:"cache_creation_tokens"`
 	TotalTokens          int64               `json:"total_tokens"`
+	// Modality counters are nil when the upstream reported no breakdown.
+	TextInputTokens   *int64 `json:"text_input_tokens,omitempty"`
+	ImageInputTokens  *int64 `json:"image_input_tokens,omitempty"`
+	AudioInputTokens  *int64 `json:"audio_input_tokens,omitempty"`
+	VideoInputTokens  *int64 `json:"video_input_tokens,omitempty"`
+	FileInputTokens   *int64 `json:"file_input_tokens,omitempty"`
+	CachedTextTokens  *int64 `json:"cached_text_tokens,omitempty"`
+	CachedImageTokens *int64 `json:"cached_image_tokens,omitempty"`
+	CachedAudioTokens *int64 `json:"cached_audio_tokens,omitempty"`
+	TextOutputTokens  *int64 `json:"text_output_tokens,omitempty"`
+	ImageOutputTokens *int64 `json:"image_output_tokens,omitempty"`
+	AudioOutputTokens *int64 `json:"audio_output_tokens,omitempty"`
 }
 
 // ManagementRequest describes an incoming HTTP request via management API.

@@ -496,6 +496,8 @@ func TestErrorTypeExtraction(t *testing.T) {
 		{"anthropic nested code", `{"error":{"type":"api_error","code":"overloaded"}}`, "api_error"},
 		{"flat type", `{"type":"invalid_request_error","message":"bad"}`, "invalid_request_error"},
 		{"flat code", `{"code":"RESOURCE_EXHAUSTED"}`, "RESOURCE_EXHAUSTED"},
+		{"google rpc error info reason", `{"error":{"code":403,"status":"PERMISSION_DENIED","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"TOS_VIOLATION"}]}}`, "TOS_VIOLATION"},
+		{"google rpc status fallback", `{"error":{"code":429,"message":"Resource has been exhausted","status":"RESOURCE_EXHAUSTED"}}`, "RESOURCE_EXHAUSTED"},
 		{"non json", `<html>502 Bad Gateway</html>`, ""},
 		{"empty", ``, ""},
 		{"json without identifier", `{"message":"nope"}`, ""},

@@ -36,9 +36,14 @@ const (
 // error identifier, in priority order.
 var errorTypeKeys = []string{"$.error.type", "$.error.code", "$.type", "$.code"}
 
+// errorStatusKeys are fallback JSON paths for Google RPC status strings when
+// no error.type / error.code string or google.rpc.ErrorInfo reason is present.
+var errorStatusKeys = []string{"$.error.status", "$.status"}
+
 // extractErrorType pulls a short machine-readable error identifier out of an
 // upstream failure body. Upstream error shapes vary (OpenAI/Anthropic nest it
-// under "error", Google/Azure keep it flat), so several paths are probed.
+// under "error", Google RPC uses numeric error.code + error.status + details[],
+// Azure keeps it flat), so several paths are probed.
 // It returns "" when the body is not a JSON object or carries no identifier.
 func extractErrorType(body string) string {
 	trimmed := strings.TrimSpace(body)
@@ -56,7 +61,49 @@ func extractErrorType(body string) string {
 		}
 		return value[:min(len(value), maxErrorType)]
 	}
+	if reason := extractGoogleErrorReason(parsed); reason != "" {
+		return reason[:min(len(reason), maxErrorType)]
+	}
+	for _, path := range errorStatusKeys {
+		value, ok := resolveString(parsed, strings.Split(strings.TrimPrefix(path, "$."), "."))
+		if !ok || value == "" {
+			continue
+		}
+		return value[:min(len(value), maxErrorType)]
+	}
 	return ""
+}
+
+// extractGoogleErrorReason inspects Google RPC error.details[] for an
+// ErrorInfo reason (such as TOS_VIOLATION or RATE_LIMIT_EXCEEDED).
+func extractGoogleErrorReason(parsed map[string]any) string {
+	errObj, ok := parsed["error"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	details, ok := errObj["details"].([]any)
+	if !ok {
+		return ""
+	}
+	fallback := ""
+	for _, item := range details {
+		detail, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		reason, _ := detail["reason"].(string)
+		reason = strings.TrimSpace(reason)
+		if reason == "" {
+			continue
+		}
+		if typ, _ := detail["@type"].(string); strings.HasSuffix(typ, "google.rpc.ErrorInfo") {
+			return reason
+		}
+		if fallback == "" {
+			fallback = reason
+		}
+	}
+	return fallback
 }
 
 // resolveString walks a parsed JSON object along path segments.

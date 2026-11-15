@@ -74,7 +74,7 @@ plugins:
 ### 本地打包
 
 ```bash
-./scripts/package-release.sh 0.9.0
+./scripts/package-release.sh 0.9.1
 ```
 
 产物写入 `release-dist/`，包含平台压缩包与 `checksums.txt`。

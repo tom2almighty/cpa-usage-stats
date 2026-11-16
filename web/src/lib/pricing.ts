@@ -73,6 +73,8 @@ const PROVIDER_HINTS: Record<string, string[]> = {
   vertex: ["google-vertex", "google"],
   interactions: ["google"],
   xai: ["xai"],
+  kimi: ["moonshotai", "moonshot"],
+  "kimi-ai": ["moonshotai", "moonshot"],
   meta: ["meta", "meta-llama"],
   devin: ["devin", "cognition"],
 };

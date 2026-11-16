@@ -43,10 +43,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # ubuntu-latest is now an amd64v3 image, which makes the C compiler
+          # emit AVX2/BMI2 into cgo code. Keep the release at the x86-64 baseline.
+          - os: ubuntu-24.04
             goos: linux
             goarch: amd64
             ext: so
+            cgo_cflags: '-O2 -g -march=x86-64 -mtune=generic'
           - os: ubuntu-24.04-arm
             goos: linux
             goarch: arm64
@@ -82,15 +85,16 @@ jobs:
 
       - name: Compile and Package
         shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '1'
+          CGO_CFLAGS: ${{ matrix.cgo_cflags }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           LIB_NAME="cpa-usage-stats.${{ matrix.ext }}"
           ZIP_NAME="cpa-usage-stats_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.zip"
           mkdir -p dist
-
-          export GOOS="${{ matrix.goos }}"
-          export GOARCH="${{ matrix.goarch }}"
-          export CGO_ENABLED=1
 
           if [ "${{ matrix.goos }}" = "darwin" ] && [ "${{ matrix.goarch }}" = "amd64" ]; then
             export CC="clang -target x86_64-apple-macos10.13"

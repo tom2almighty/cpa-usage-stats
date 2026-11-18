@@ -240,6 +240,8 @@
       "token_reasoning": "思考",
       "token_cache_read": "缓存读",
       "token_cache_write": "缓存写",
+      "token_cache_write_5m": "缓存写 5m TTL",
+      "token_cache_write_1h": "缓存写 1h TTL",
       "token_total": "总计",
       "token_cache_rate": "缓存命中率",
       "token_text_input": "文本输入",

@@ -237,6 +237,9 @@ var tableColumns = []struct{ name, ddl string }{
 	{"cached_tokens", "INTEGER NOT NULL DEFAULT 0"},
 	{"cache_read_tokens", "INTEGER NOT NULL DEFAULT 0"},
 	{"cache_creation_tokens", "INTEGER NOT NULL DEFAULT 0"},
+	// Cache write TTL split stays NULL when the upstream sends no breakdown.
+	{"cache_creation_5m_tokens", "INTEGER"},
+	{"cache_creation_1h_tokens", "INTEGER"},
 	{"total_tokens", "INTEGER NOT NULL DEFAULT 0"},
 	// Modality counters stay NULL when the upstream sends no breakdown.
 	{"text_input_tokens", "INTEGER"},
@@ -360,11 +363,12 @@ func (s *Storage) InsertBatch(records []model.UsageRecord) error {
 			stream, generate, requested_at, latency_ms, ttft_ms,
 			failed, status_code, error_type, failure_body, response_headers,
 			input_tokens, output_tokens, reasoning_tokens,
-			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
+			cached_tokens, cache_read_tokens, cache_creation_tokens,
+			cache_creation_5m_tokens, cache_creation_1h_tokens, total_tokens,
 			text_input_tokens, image_input_tokens, audio_input_tokens, video_input_tokens, file_input_tokens,
 			cached_text_tokens, cached_image_tokens, cached_audio_tokens,
 			text_output_tokens, image_output_tokens, audio_output_tokens
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare insert: %w", err)
@@ -428,6 +432,8 @@ func (s *Storage) InsertBatch(records []model.UsageRecord) error {
 			r.Detail.CachedTokens,
 			r.Detail.CacheReadTokens,
 			r.Detail.CacheCreationTokens,
+			r.Detail.CacheCreation5mTokens,
+			r.Detail.CacheCreation1hTokens,
 			r.Detail.TotalTokens,
 			r.Detail.TextInputTokens,
 			r.Detail.ImageInputTokens,
@@ -805,7 +811,8 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 			stream, generate, requested_at, latency_ms, ttft_ms,
 			failed, status_code, COALESCE(error_type, ''), COALESCE(failure_body, ''), COALESCE(response_headers, ''),
 			input_tokens, output_tokens, reasoning_tokens,
-			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
+			cached_tokens, cache_read_tokens, cache_creation_tokens,
+			cache_creation_5m_tokens, cache_creation_1h_tokens, total_tokens,
 			text_input_tokens, image_input_tokens, audio_input_tokens, video_input_tokens, file_input_tokens,
 			cached_text_tokens, cached_image_tokens, cached_audio_tokens,
 			text_output_tokens, image_output_tokens, audio_output_tokens
@@ -863,6 +870,8 @@ func (s *Storage) GetRecords(filter model.UsageFilter) (*model.RecordListRespons
 			&r.CachedTokens,
 			&r.CacheReadTokens,
 			&r.CacheCreationTokens,
+			&r.CacheCreation5mTokens,
+			&r.CacheCreation1hTokens,
 			&r.TotalTokens,
 			&r.TextInputTokens,
 			&r.ImageInputTokens,

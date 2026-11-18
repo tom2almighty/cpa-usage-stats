@@ -109,6 +109,9 @@ export interface StoredRecord {
   cache_read_tokens: number;
   cache_creation_tokens: number;
   total_tokens: number;
+  /** Cache write TTL split is absent when the upstream sends no breakdown. */
+  cache_creation_5m_tokens?: number | null;
+  cache_creation_1h_tokens?: number | null;
   /** Modality counters are absent when the upstream sends no breakdown. */
   text_input_tokens?: number | null;
   image_input_tokens?: number | null;

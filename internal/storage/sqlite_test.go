@@ -366,17 +366,19 @@ func TestModalityTokensRoundTrip(t *testing.T) {
 		Model:       "gpt-image-2.5",
 		RequestedAt: time.Now(),
 		Detail: model.UsageDetail{
-			InputTokens:       80,
-			OutputTokens:      1056,
-			TotalTokens:       1136,
-			TextInputTokens:   ptr(30),
-			ImageInputTokens:  ptr(50),
-			AudioInputTokens:  ptr(0),
-			FileInputTokens:   ptr(12),
-			CachedTextTokens:  ptr(25),
-			CachedImageTokens: ptr(15),
-			TextOutputTokens:  ptr(0),
-			ImageOutputTokens: ptr(1056),
+			InputTokens:           80,
+			OutputTokens:          1056,
+			TotalTokens:           1136,
+			TextInputTokens:       ptr(30),
+			ImageInputTokens:      ptr(50),
+			AudioInputTokens:      ptr(0),
+			FileInputTokens:       ptr(12),
+			CachedTextTokens:      ptr(25),
+			CachedImageTokens:     ptr(15),
+			TextOutputTokens:      ptr(0),
+			ImageOutputTokens:     ptr(1056),
+			CacheCreation5mTokens: ptr(20),
+			CacheCreation1hTokens: ptr(0),
 		},
 	}
 	if err := store.InsertBatch([]model.UsageRecord{in}); err != nil {
@@ -408,6 +410,12 @@ func TestModalityTokensRoundTrip(t *testing.T) {
 	}
 	if got.FileInputTokens == nil || *got.FileInputTokens != 12 {
 		t.Errorf("file input = %v, want 12", got.FileInputTokens)
+	}
+	if got.CacheCreation5mTokens == nil || *got.CacheCreation5mTokens != 20 {
+		t.Errorf("cache write 5m = %v, want 20", got.CacheCreation5mTokens)
+	}
+	if got.CacheCreation1hTokens == nil || *got.CacheCreation1hTokens != 0 {
+		t.Errorf("cache write 1h = %v, want explicit 0", got.CacheCreation1hTokens)
 	}
 }
 

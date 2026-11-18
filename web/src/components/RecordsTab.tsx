@@ -214,6 +214,12 @@ function DetailRow({ record, cost }: { record: StoredRecord; cost: RecordCost | 
     ...(record.cache_creation_tokens > 0
       ? [{ label: t("records.detail.token_cache_write"), value: formatNumber(record.cache_creation_tokens) }]
       : []),
+    ...(record.cache_creation_5m_tokens
+      ? [{ label: t("records.detail.token_cache_write_5m"), value: formatNumber(record.cache_creation_5m_tokens) }]
+      : []),
+    ...(record.cache_creation_1h_tokens
+      ? [{ label: t("records.detail.token_cache_write_1h"), value: formatNumber(record.cache_creation_1h_tokens) }]
+      : []),
     ...(record.text_input_tokens
       ? [{ label: t("records.detail.token_text_input"), value: formatNumber(record.text_input_tokens) }]
       : []),

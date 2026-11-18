@@ -72,6 +72,11 @@ type UsageDetail struct {
 	CacheCreationTokens int64 `json:"CacheCreationTokens"`
 	TotalTokens         int64 `json:"TotalTokens"`
 
+	// Cache write TTL split reported by upstreams that bill 5m and 1h
+	// cache writes at different rates; nil means no breakdown.
+	CacheCreation5mTokens *int64 `json:"CacheCreation5mTokens,omitempty"`
+	CacheCreation1hTokens *int64 `json:"CacheCreation1hTokens,omitempty"`
+
 	TextInputTokens   *int64 `json:"TextInputTokens,omitempty"`
 	ImageInputTokens  *int64 `json:"ImageInputTokens,omitempty"`
 	AudioInputTokens  *int64 `json:"AudioInputTokens,omitempty"`
@@ -128,6 +133,9 @@ type StoredRecord struct {
 	CacheReadTokens      int64               `json:"cache_read_tokens"`
 	CacheCreationTokens  int64               `json:"cache_creation_tokens"`
 	TotalTokens          int64               `json:"total_tokens"`
+	// Cache write TTL split is nil when the upstream reported no breakdown.
+	CacheCreation5mTokens *int64 `json:"cache_creation_5m_tokens,omitempty"`
+	CacheCreation1hTokens *int64 `json:"cache_creation_1h_tokens,omitempty"`
 	// Modality counters are nil when the upstream reported no breakdown.
 	TextInputTokens   *int64 `json:"text_input_tokens,omitempty"`
 	ImageInputTokens  *int64 `json:"image_input_tokens,omitempty"`

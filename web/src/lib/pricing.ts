@@ -77,6 +77,7 @@ const PROVIDER_HINTS: Record<string, string[]> = {
   "kimi-ai": ["moonshotai", "moonshot"],
   meta: ["meta", "meta-llama"],
   devin: ["devin", "cognition"],
+  copilot: ["anthropic", "openai", "google", "xai", "moonshotai", "github-copilot"],
 };
 
 /** Common model shorthand aliases mapping to canonical models.dev IDs. */
@@ -515,10 +516,14 @@ export function suggestPrices(
 
 // ---------- Cost Calculations ----------
 
-function tokenSemantics(provider: string | undefined): TokenSemantics {
+function tokenSemantics(provider: string | undefined, model?: string): TokenSemantics {
   const value = (provider ?? "").trim().toLowerCase();
   if (value.startsWith("openai-compat") || value.includes("openaicompat")) return "subset";
   if (value.includes("claude") || value.includes("anthropic")) return "independent";
+  if (value === "copilot") {
+    const bareModel = (model ?? "").trim().toLowerCase().replace(/^.*\//, "");
+    return bareModel.startsWith("claude-") ? "independent" : "subset";
+  }
   for (const marker of ["gemini", "aistudio", "antigravity", "vertex", "interaction"]) {
     if (value.includes(marker)) return "separateReasoning";
   }
@@ -594,7 +599,7 @@ export function recordCost(table: PricingTable | null, record: StoredRecord): Re
     provider: record.provider,
   });
   if (!match) return null;
-  const semantics = tokenSemantics(record.provider);
+  const semantics = tokenSemantics(record.provider, record.response_model || record.model || record.alias);
   const usage = usageOfRecord(record);
   const breakdown = calculateBreakdown(match.price, usage, semantics);
   return { match, cost: breakdown.totalCost, breakdown };
@@ -610,7 +615,7 @@ export function groupCostDetails(table: PricingTable | null, group: GroupStat): 
   const provider = group.secondary ?? "";
   const match = priceFor(table, { model: group.name, provider });
   if (!match) return null;
-  const semantics = tokenSemantics(provider);
+  const semantics = tokenSemantics(provider, group.name);
   const usage = usageOfGroup(group);
   const breakdown = calculateBreakdown(match.price, usage, semantics);
   return { match, cost: breakdown.totalCost, breakdown };

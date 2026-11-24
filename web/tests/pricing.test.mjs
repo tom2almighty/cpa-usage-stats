@@ -31,6 +31,14 @@ const TABLE = {
     "mai-code-2": {
       "github-copilot": { input: 1, output: 4 },
     },
+    "gemini-4-neon": {
+      openrouter: { input: 5, output: 25 },
+      google: { input: 1.5, output: 10, cacheRead: 0.3 },
+    },
+    "swe-2": {
+      openrouter: { input: 4, output: 16 },
+      cognition: { input: 1, output: 5 },
+    },
   },
 };
 
@@ -38,6 +46,13 @@ test("copilot prefers canonical upstream provider prices and falls back to githu
   assert.equal(priceFor(TABLE, { model: "copilot/claude-sonnet-5", provider: "copilot" })?.providerId, "anthropic");
   assert.equal(priceFor(TABLE, { model: "copilot/gpt-5.3-codex", provider: "copilot" })?.providerId, "openai");
   assert.equal(priceFor(TABLE, { model: "copilot/mai-code-2", provider: "copilot" })?.providerId, "github-copilot");
+});
+
+test("devin prefers cognition for native models and canonical upstream providers for proxied models", () => {
+  assert.equal(priceFor(TABLE, { model: "devin/swe-2", provider: "devin" })?.providerId, "cognition");
+  assert.equal(priceFor(TABLE, { model: "devin/claude-sonnet-5", provider: "devin" })?.providerId, "anthropic");
+  assert.equal(priceFor(TABLE, { model: "devin/gpt-5.3-codex", provider: "devin" })?.providerId, "openai");
+  assert.equal(priceFor(TABLE, { model: "devin/gemini-4-neon", provider: "devin" })?.providerId, "google");
 });
 
 test("copilot uses independent cache semantics for Claude models and subset semantics for OpenAI models", () => {

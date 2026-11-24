@@ -76,7 +76,7 @@ const PROVIDER_HINTS: Record<string, string[]> = {
   kimi: ["moonshotai", "moonshot"],
   "kimi-ai": ["moonshotai", "moonshot"],
   meta: ["meta", "meta-llama"],
-  devin: ["devin", "cognition"],
+  devin: ["devin", "cognition", "anthropic", "openai", "google", "moonshotai", "zhipuai"],
   copilot: ["anthropic", "openai", "google", "xai", "moonshotai", "github-copilot"],
 };
 
